@@ -1,0 +1,12 @@
+# Real bank statements and their passwords: private, never committed
+tests/statements/
+tests/expected/
+tests/reports/
+*.pdf
+passwords.txt
+.env
+data/*.db
+__pycache__/
+.venv/
+out/
+tests/private/

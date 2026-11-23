@@ -1,0 +1,9 @@
+id: kvb
+name: Karur Vysya Bank
+detect:
+  header: ['\bKVBL0\d{6}\b', 'Karur Vysya', '\bKVB ADVANTAGE\b']
+  # Checked on the last page (bank notices / footer)
+  footer: ['kvb\.bank\.in', 'Karur Vysya']
+details:
+  # Name is the first line under "ACCOUNT STATEMENT", before "Acc.No."
+  holder: '^(?P<h>.+?)\s+Acc\.\s*No'

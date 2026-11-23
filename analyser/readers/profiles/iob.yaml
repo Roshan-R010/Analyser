@@ -1,0 +1,8 @@
+id: iob
+name: Indian Overseas Bank
+detect:
+  header: ['\bIOBA0\d{6}\b', 'Indian Overseas Bank']
+details:
+  # Page 1 reads "Account Number - <number> <NAME START> <BRANCH> (<branch code>)" and the
+  # name continues on the next line: join the part after the number with the next line.
+  holder: 'Account Number\s*-\s*\d+\s+(?P<h1>.+?)\s+\S+\s+\(\d+\)\s*\n(?P<h2>[^\n:]+)$'
