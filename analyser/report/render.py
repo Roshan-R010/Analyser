@@ -90,6 +90,52 @@ def _short_period(a: date | None, b: date | None) -> str:
     return f"{left} – {b:%d %b %Y}"
 
 
+def _count(n: int, word: str) -> str:
+    return f"{n} {word}{'s' if n != 1 else ''}"
+
+
+def _io(tx) -> str:
+    cr = [t for t in tx if t.credit]
+    dr = [t for t in tx if t.debit]
+    bits = []
+    if cr:
+        bits.append(f"In ₹{inr(sum(t.credit for t in cr))}")
+    if dr:
+        bits.append(f"Out ₹{inr(sum(t.debit for t in dr))}")
+    return " · ".join(bits)
+
+
+def unknown_blocks(listed) -> list[dict]:
+    """Unknown entries, one block per month."""
+    by: dict[date, list] = {}
+    for t in listed:
+        by.setdefault(t.date.replace(day=1), []).append(t)
+    out = []
+    for m, tx in by.items():
+        cr, dr = sum(1 for t in tx if t.credit), sum(1 for t in tx if t.debit)
+        sub = " · ".join(x for x in (cr and _count(cr, "credit"), dr and _count(dr, "debit")) if x)
+        out.append({"title": f"{m:%B %Y}", "subline": sub, "right": _io(tx),
+                    "rows": [(t, t.description, t.mode) for t in tx]})
+    return out
+
+
+def cheque_blocks(cheques) -> list[dict]:
+    """Cheques in number order, split into issued / deposited / returned."""
+    groups = [
+        ("Cheques issued", "paid out by the borrower", [t for t in cheques if t.debit and t.mode != "Return"]),
+        ("Cheques deposited", "received by the borrower", [t for t in cheques if t.credit and t.mode != "Return"]),
+        ("Cheque returns", "entries the bank marked as returned or reversed", [t for t in cheques if t.mode == "Return"]),
+    ]
+    out = []
+    for title, what, tx in groups:
+        if tx:
+            total = sum(t.debit + t.credit for t in tx)
+            out.append({"title": title, "subline": f"{_count(len(tx), 'cheque')} · {what}", "right": _io(tx),
+                        "total": f"₹{inr(total)}",
+                        "rows": [(t, t.party_clean or "Unknown", t.description) for t in tx], "bad": title == "Cheque returns"})
+    return out
+
+
 def _months(ms: list[date]) -> str:
     return ", ".join(f"{m:%b %y}" for m in ms) if ms else "–"
 
@@ -115,6 +161,8 @@ def render_html(r: Report, generated: datetime | None = None) -> str:
                                  if a.account_no else names.get(a.bank, a.bank.upper()) for a in r.accounts),
         rec_year=str(rec_years[0]) if len(rec_years) == 1 else "",
         month_dates=_month_dates, title=_title,
+        unknown_blocks=unknown_blocks(r.unknown.listed), cheque_blocks=cheque_blocks(r.cheques),
+        all_year=str(first.year) if first and last and first.year == last.year else "",
         loan_blocks=loan_blocks(r.loans), loan_year=str(loan_years[0]) if len(loan_years) == 1 else "",
         loan_paid=sum((ln.paid_total for ln in r.loans), Decimal(0)),
         loan_received=sum((ln.received_total for ln in r.loans), Decimal(0)),
