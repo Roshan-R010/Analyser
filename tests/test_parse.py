@@ -41,6 +41,8 @@ def test_not_dates(text):
     ("(500.00)", D("-500.00")),
     ("-500.00", D("-500.00")),
     ("100", D("100.00")),
+    (".00", D("0.00")),
+    ("-.50", D("-0.50")),
 ])
 def test_amounts(text, expected):
     assert parse_amount(text) == expected

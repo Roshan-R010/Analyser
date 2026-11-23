@@ -63,6 +63,8 @@ def parse_amount(text: str) -> Decimal | None:
         return Decimal("0.00")
     t = t.replace(" ", "")
     t = re.sub(r"(?i)(cr|dr)\.?$", r" \1", t)
+    # Some banks drop the leading zero: ".00", "-.50"
+    t = re.sub(r"^(\(?-?)\.(\d)", r"\g<1>0.\2", t)
     m = _AMOUNT.match(t)
     if not m:
         return None

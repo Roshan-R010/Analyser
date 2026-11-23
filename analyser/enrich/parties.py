@@ -35,7 +35,10 @@ CHANNEL_WORDS = {
     "REQPAY", "PAY", "SENT", "RECEIVED", "COLLECT", "MANDATE", "EMI", "NEFTCR", "NEFTDR", "RTGSCR",
     "RTGSDR", "BPAY", "BBPS", "POS", "ECOM", "VPS", "IPS", "PCD", "DEBIT", "CREDIT", "CARD", "REJ",
     "DISBURSEMENT", "DISB", "P2M", "P2P", "TPFT", "PUR", "PAYMEN", "PAYME", "PAYM", "ACCOUNT", "REQUES",
+    "IFT", "BRN", "INSTALLMENT", "INSTALMENT", "REMITTER", "TRANSFE",
 }
+# The description itself says it went to the borrower's own account
+SELF_TEXT = re.compile(r"self\s*transf|own\s*a/?c\s*transf", re.I)
 # A piece that is only this (after cleaning) is not a party
 JUNK_NAMES = {"FUND", "FUNDS", "BANK", "TRANSFER", "PAYMENT"}
 # Bank names (squashed, upper case). A description piece that is a bank's name - often
@@ -240,7 +243,7 @@ def assign_parties(transactions: list[Transaction], holders: list[str],
                 elif other and other in by_last4:
                     raw = by_last4[other]
             t.party_raw = raw
-            if raw and _is_self(raw, holders):
+            if SELF_TEXT.search(t.description or "") or (raw and _is_self(raw, holders)):
                 special = SELF
             elif not raw and special is None:
                 special = UNKNOWN

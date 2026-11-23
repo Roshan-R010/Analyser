@@ -181,3 +181,34 @@ def test_outward_return_charge_with_gst_is_one_deposited_return():
         t.mode = classify(t)
     [b] = build_returns(tx).bounces
     assert b.direction == "Deposited by borrower" and len(b.charges) == 2
+
+
+def test_loans_without_a_lender_name():
+    cases = [
+        ("ABC012345678901_EMI_21-09-2026", "Axis Bank loan a/c …8901", "Bank"),
+        ("ECS/UTIBDE01111110202606/RAZORPAY SOFTWARE LIMITE",
+         "Auto-debit via Razorpay (mandate UTIBDE01111110202606)", "Lender not named"),
+        ("ACH-DR-INSTALLMENT- 0000AAAA1111BBBB222233334444", "Auto-debit installment", "Lender not named"),
+    ]
+    for desc, lender, kind in cases:
+        t = T(desc, debit="1000", bank="axis")
+        t.mode = classify(t)
+        assign_parties([t], ["SOMEONE"])
+        assert t.mode == "ECS/NACH", desc
+        assert identify(t) == (lender, kind), desc
+
+
+def test_emi_collected_in_pieces():
+    from analyser.sections.loans import usual_emi
+    pays = [T("x", debit=a, d=d) for a, d in [
+        ("36228", date(2026, 8, 20)), ("7631.25", date(2026, 9, 21)), ("11300", date(2026, 9, 22)),
+        ("17886.75", date(2026, 9, 24)), ("1770.35", date(2026, 10, 21)), ("35047.65", date(2026, 10, 22)),
+        ("36818", date(2026, 11, 21))]]
+    assert usual_emi(pays) == D("36818.00")
+    assert usual_emi([T("x", debit="500", d=date(2026, m, 5)) for m in (1, 2, 3)]) == D("500")
+
+
+def test_self_transfer_in_description():
+    tx = [T("INB/IFT/RAVI ./SELF TRANSFE", debit="1", mode="Transfer")]
+    assign_parties(tx, ["XYZ TRADERS"])
+    assert tx[0].party_clean == "Self"

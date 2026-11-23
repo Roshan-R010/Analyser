@@ -51,12 +51,17 @@ def build_flags(transactions: list[Transaction], daily: dict[date, Decimal], ret
     if tech:
         flags.append(Flag("watch", f"{len(tech)} technical return(s): "
                                    + "; ".join(f"{b.date:%d %b} {b.reason.lower()}" for b in tech[:3])))
-    if charge_only:
+    own = [b for b in charge_only if b.direction == "Issued by borrower"]
+    other = [b for b in charge_only if b.direction != "Issued by borrower"]
+    if own:
+        flags.append(Flag("high", f"{len(own)} of the borrower's own cheque(s) returned (charge only, "
+                                  f"reason not shown): {', '.join(f'{b.date:%d %b %Y}' for b in own)}"))
+    if other:
         def _what(b) -> str:
             who = " deposited cheque" if b.direction == "Deposited by borrower" else ""
             return f"{b.month:%b %Y}{who}"
-        flags.append(Flag("watch", f"{len(charge_only)} return charge(s) without the returned entry in the "
-                                   f"statement ({', '.join(_what(b) for b in charge_only)})"))
+        flags.append(Flag("watch", f"{len(other)} return charge(s) without the returned entry in the "
+                                   f"statement ({', '.join(_what(b) for b in other)})"))
 
     neg_days = sorted(d for d, b in daily.items() if b < 0)
     if neg_days:

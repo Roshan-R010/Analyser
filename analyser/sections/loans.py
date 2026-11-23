@@ -42,6 +42,23 @@ def _months_between(a: date, b: date) -> list[date]:
     return out
 
 
+def usual_emi(pays: list[Transaction]) -> Decimal | None:
+    """The usual payment: the most common amount if it repeats; otherwise the most common
+    monthly total (an EMI collected in pieces when the balance ran short)."""
+    if len(pays) < 2:
+        return None
+    top, times = Counter(t.debit for t in pays).most_common(1)[0]
+    if times >= 2 and times >= 0.4 * len(pays):
+        return top
+    monthly: dict[date, Decimal] = {}
+    for t in pays:
+        monthly[_month(t.date)] = monthly.get(_month(t.date), ZERO) + t.debit
+    total, n = Counter(monthly.values()).most_common(1)[0]
+    if n >= 2:
+        return total
+    return sorted(monthly.values())[len(monthly) // 2]  # median month
+
+
 def build_loans(transactions: list[Transaction], returns: ReturnsSection) -> list[LenderLoan]:
     by: dict[str, list[Transaction]] = {}
     for t in transactions:
@@ -54,9 +71,8 @@ def build_loans(transactions: list[Transaction], returns: ReturnsSection) -> lis
         entries.sort(key=lambda t: t.date)
         pays = [t for t in entries if t.debit]
         gets = [t for t in entries if t.credit]
-        amounts = Counter(t.debit for t in pays)
-        emi = amounts.most_common(1)[0][0] if len(pays) >= 2 else None
         paid_months = sorted({_month(t.date) for t in pays})
+        emi = usual_emi(pays)
 
         missed, split = [], []
         if len(paid_months) >= 2:

@@ -38,8 +38,9 @@ RULES: list[tuple[str, re.Pattern]] = [
                 r"|\brvsl\b|\breversal\b|\breversed\b|\bupi[\s\-]*rev\b")),
     (INTEREST, _r(r"\binterest\b|\bint\.?\s*(pd|paid|cr|credit|coll|on|capitalised)\b|\bint\.pd")),
     # ECS / NACH / ACH mandates (EMIs)
+    # ECS / NACH / ACH mandates and loan EMIs the bank debits itself ("ABC0123..._EMI_21-09-2026")
     (ECS, _r(r"\b(ecs|nach|achd?|bdecs|si)\b|\bach[\s\-]*d[\s\-]|achd-|ach-d|standing\s*instr"
-             r"|\bmandate\b|\bnach[\-/]")),
+             r"|\bmandate\b|\bnach[\-/]|(?<![a-z])emi(?![a-z])|\binstal+ment\b")),
     (UPI, _r(r"\bupi(mi|kvb)?\b|upi[\-/]|@ok|@ybl|@paytm|@axl|@ibl|@upi|@apl|@ptys|@ptyes")),
     (IMPS, _r(r"\bimps\b|imps[\-/]|mmt/imps|\bp2a\b")),
     (RTGS, _r(r"\brtgs\b|rtgs[\-/ ]|rtgsdr|rtgscr")),
