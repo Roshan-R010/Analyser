@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from analyser.model import ZERO, Statement, Transaction
+from analyser.model import ZERO, PrintedReturn, Statement, Transaction
 from analyser.readers.layout import Line, PageGeometry, Table, Word, find_table, page_geometry
 from analyser.readers.parse import amount_side, parse_amount, parse_date
 
@@ -33,6 +33,13 @@ TOTALS_PATTERNS = [
 _AMT = r"(?:rs\.?|inr|₹)?\s*(-?[\d,]+\.\d{2})\s*(cr|dr)?\b"
 OPENING_PRINTED = re.compile(r"opening\s*balance\s*:?\s*" + _AMT, re.I)
 CLOSING_PRINTED = re.compile(r"closing\s*balance\s*:?\s*" + _AMT, re.I)
+# A bank's own list of returned cheques, printed after the transactions
+RETURNS_HEADING = re.compile(r"(cheque|chq)\s*return(ed)?\s*details|returned\s*cheques|"
+                             r"dishono?u?red\s*(cheques|instruments)|cheque\s*returns", re.I)
+RETURNS_ROW = re.compile(
+    r"(?P<type>inward|outward|i/?w|o/?w)?\s*(?:clg|clearing)?\s*(?P<cheque>\d{3,10})\s+"
+    r"(?P<amount>[\d,]+(?:\.\d{1,2})?)\s+(?P<date>\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})\s+(?P<reason>[A-Za-z].*)$",
+    re.I)
 
 
 @dataclass
@@ -281,3 +288,29 @@ def _read_printed_totals(pdf, st: Statement, options: ReaderOptions) -> None:
     closings = list(CLOSING_PRINTED.finditer(last))
     if closings:
         st.printed_closing = _money(closings[-1].group(1), closings[-1].group(2))
+    st.printed_returns = read_returns_table("\n".join(tail_pages[::-1]))
+
+
+def read_returns_table(text: str) -> list[PrintedReturn]:
+    """Rows of a printed "Cheque Return Details" table, if the statement has one."""
+    out: list[PrintedReturn] = []
+    m = RETURNS_HEADING.search(text)
+    if not m:
+        return out
+    misses = 0
+    for line in text[m.end():].splitlines():
+        row = RETURNS_ROW.search(line.strip())
+        if not row:
+            misses += 1
+            if out and misses > 2:  # the table has ended
+                break
+            continue
+        misses = 0
+        d = parse_date(row.group("date"))
+        amount = parse_amount(row.group("amount"))
+        if d is None or amount is None:
+            continue
+        kind = (row.group("type") or "inward").lower()
+        out.append(PrintedReturn(date=d, cheque_no=row.group("cheque").lstrip("0") or "0", amount=amount,
+                                 reason=row.group("reason").strip(), inward=kind.startswith("i")))
+    return out

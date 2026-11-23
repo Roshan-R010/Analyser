@@ -80,3 +80,17 @@ def test_profile_printed_totals_and_balances():
     assert OPENING_PRINTED.search("OPENING BALANCE 128541.23").group(1) == "128541.23"
     assert CLOSING_PRINTED.search("Closing Balance : 65,191.81 Dr").groups() == ("65,191.81", "Dr")
     assert CLOSING_PRINTED.search("The closing balance as shown includes funds under clearing") is None
+
+
+def test_printed_cheque_return_table():
+    from analyser.readers.generic import read_returns_table
+    text = ("CLOSING BALANCE 1000.00\nCheque Return Details\n"
+            "Transactin Type Chq No Chq Amount Return Date Reason for Return\n"
+            "INWARD CLG 100001 62500 12-08-2026 Funds insufficient\n"
+            "OUTWARD CLG 200002 1500.50 14-08-2026 Signature differs\n"
+            "Legends :\nsome notice text")
+    rows = read_returns_table(text)
+    assert [(r.cheque_no, str(r.amount), r.date.day, r.inward) for r in rows] == [
+        ("100001", "62500.00", 12, True), ("200002", "1500.50", 14, False)]
+    assert rows[0].reason == "Funds insufficient"
+    assert read_returns_table("no such table here") == []

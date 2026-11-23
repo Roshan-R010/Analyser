@@ -45,9 +45,12 @@ def build_flags(transactions: list[Transaction], daily: dict[date, Decimal], ret
 
     funds = [b for b in returns.bounces if b.kind == FUNDS]
     tech = [b for b in returns.bounces if b.kind == TECHNICAL]
-    charge_only = [b for b in returns.bounces if not b.entries]
+    charge_only = [b for b in returns.bounces if not b.entries and not b.amount]  # only a charge seen
     if funds:
-        flags.append(Flag("high", f"{len(funds)} bounce(s) for insufficient funds: {_dates([b.date for b in funds])}"))
+        total = sum((b.amount for b in funds), ZERO)
+        flags.append(Flag("high", f"{len(funds)} bounce(s) for insufficient funds"
+                                  + (f", {inr(total)} in total" if total else "")
+                                  + f": {_dates([b.date for b in funds])}"))
     if tech:
         flags.append(Flag("watch", f"{len(tech)} technical return(s): "
                                    + "; ".join(f"{b.date:%d %b} {b.reason.lower()}" for b in tech[:3])))

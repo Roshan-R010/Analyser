@@ -12,7 +12,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from analyser.enrich.modes import CHARGES, RETURN
-from analyser.model import ZERO, Transaction
+from analyser.model import ZERO, PrintedReturn, Transaction
 
 FUNDS, TECHNICAL, UNKNOWN = "Funds", "Technical", "Unknown"
 ISSUED, DEPOSITED = "Issued by borrower", "Deposited by borrower"
@@ -96,7 +96,8 @@ def _reason(text: str) -> tuple[str, str]:
     return "", UNKNOWN
 
 
-def build_returns(transactions: list[Transaction]) -> ReturnsSection:
+def build_returns(transactions: list[Transaction],
+                  printed: list[PrintedReturn] | None = None) -> ReturnsSection:
     bounces: list[Bounce] = []
     transfers: list[TransferReturn] = []
 
@@ -124,9 +125,31 @@ def build_returns(transactions: list[Transaction]) -> ReturnsSection:
         b.original = _find_original(transactions, i, b)
         bounces.append(b)
 
+    _add_printed(bounces, printed or [], transactions)
+    bounces.sort(key=lambda b: b.date)
     _attach_charges(transactions, bounces)
     bounces.sort(key=lambda b: (b.date, b.cheque_no))
     return ReturnsSection(bounces=bounces, transfer_returns=transfers)
+
+
+def _add_printed(bounces: list[Bounce], printed: list[PrintedReturn], transactions: list[Transaction]) -> None:
+    """Returns from the bank's own return table. One already seen as a transaction (same
+    cheque number) only gains the printed reason; the rest are added as bounces."""
+    for p in printed:
+        label, kind = _reason(p.reason)
+        known = next((b for b in bounces if b.cheque_no and b.cheque_no == p.cheque_no), None)
+        if known:
+            if not known.reason:
+                known.reason, known.kind = label or p.reason, kind
+            continue
+        balance = next((t.balance for t in reversed(transactions) if t.date <= p.date), None)
+        bounces.append(Bounce(
+            date=p.date, month=_month(p.date),
+            description=f"{'Inward' if p.inward else 'Outward'} cheque return (bank's return list)",
+            cheque_no=p.cheque_no, amount=p.amount, credit=ZERO, debit=ZERO, balance=balance,
+            reason=label or p.reason, kind=kind, direction=ISSUED if p.inward else DEPOSITED,
+            note="Listed in the bank's cheque return table; the cheque never cleared, so it is "
+                 "not among the transactions"))
 
 
 def _find_original(transactions: list[Transaction], i: int, b: Bounce) -> Transaction | None:
@@ -175,6 +198,13 @@ def _attach_charges(transactions: list[Transaction], bounces: list[Bounce]) -> N
         if target is None and not named:
             target = next((b for b in reversed(bounces)
                            if timedelta(0) <= c.date - b.date <= timedelta(days=5) and not b.charges), None)
+        # 5. Banks often charge later: the latest earlier bounce of the same kind (I/W or O/W)
+        #    that has no charge yet, within 45 days
+        if target is None and not named:
+            want = DEPOSITED if OUTWARD.search(c.description) else ISSUED if INWARD.search(c.description) else ""
+            target = next((b for b in reversed(bounces)
+                           if b.direction == want and not b.charges and b.entries == [] and b.amount
+                           and timedelta(0) <= c.date - b.date <= timedelta(days=45)), None) if want else None
         if target is not None:
             target.charges.append(c)
             continue

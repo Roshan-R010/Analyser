@@ -41,6 +41,17 @@ class Transaction:
 
 
 @dataclass
+class PrintedReturn:
+    """One row of a bank's own "cheque return details" table."""
+
+    date: date
+    cheque_no: str
+    amount: Decimal
+    reason: str
+    inward: bool  # True: the borrower's own cheque came back; False: a cheque they deposited
+
+
+@dataclass
 class Statement:
     """One uploaded statement after reading."""
 
@@ -58,5 +69,8 @@ class Statement:
     printed_total_credit: Decimal | None = None
     printed_opening: Decimal | None = None
     printed_closing: Decimal | None = None
+    # Returned cheques the bank lists in a separate table (some banks, e.g. Axis, list
+    # inward returns only there, not as transactions)
+    printed_returns: list[PrintedReturn] = field(default_factory=list)
     # Anything the reader could not read cleanly (shown in the report, never hidden)
     warnings: list[str] = field(default_factory=list)

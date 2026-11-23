@@ -212,3 +212,16 @@ def test_self_transfer_in_description():
     tx = [T("INB/IFT/RAVI ./SELF TRANSFE", debit="1", mode="Transfer")]
     assign_parties(tx, ["XYZ TRADERS"])
     assert tx[0].party_clean == "Self"
+
+
+def test_printed_returns_become_bounces_and_take_late_charges():
+    from analyser.model import PrintedReturn
+    from analyser.sections.returns import build_returns
+    printed = [PrintedReturn(date=date(2026, 8, 12), cheque_no="100001", amount=D("62500"),
+                             reason="Funds insufficient", inward=True)]
+    tx = [T("Chq Rtn I/W Chrgs", debit="1850", d=date(2026, 9, 19)),
+          T("GST @18% on Chq Rtn I/W Chrgs", debit="333", d=date(2026, 9, 19))]
+    for t in tx:
+        t.mode = classify(t)
+    [b] = build_returns(tx, printed).bounces
+    assert b.kind == "Funds" and b.direction == "Issued by borrower" and b.charge_total == D("2183")

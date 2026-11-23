@@ -104,13 +104,13 @@
 <h2>Chq/ECS Return Txns</h2>
 {% if r.returns.bounces %}
 <table class="grid">
-  <thead><tr><th>Date</th><th>Description</th><th>Chq no</th><th class="n">Credit</th><th class="n">Debit</th>
+  <thead><tr><th>Date</th><th>Description</th><th>Chq no</th><th class="n">Amount</th>
     <th class="n">Balance</th><th>Reason</th><th class="n">Charge</th></tr></thead>
   <tbody>
   {% for b in r.returns.bounces %}
     <tr><td class="nw">{{ b.date|d }}</td>
       <td>{{ b.description }}{% if b.direction %}<div class="sub">{{ b.direction }}{% if b.original %} · original {{ b.original.date|d }}{% endif %}</div>{% endif %}{% if b.note %}<div class="sub">{{ b.note }}</div>{% endif %}</td>
-      <td>{{ b.cheque_no or '–' }}</td><td class="n">{{ b.credit|inr_or_blank }}</td><td class="n">{{ b.debit|inr_or_blank }}</td>
+      <td>{{ b.cheque_no or '–' }}</td><td class="n">{{ b.amount|inr_or_blank }}</td>
       <td class="n">{{ b.balance|inr }}</td>
       <td><span class="tag {{ b.kind|lower }}">{{ b.kind }}</span> {{ b.reason }}</td>
       <td class="n">{{ b.charge_total|inr_or_blank }}</td></tr>

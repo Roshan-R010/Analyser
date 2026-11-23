@@ -72,7 +72,8 @@ def analyse(loaded: list) -> Report:
     parties = enrich(accounts)
     tx = sorted((t for acc in accounts for t in acc.transactions), key=lambda t: t.date)
 
-    returns = build_returns(tx)
+    printed = [p for ls in loaded for p in ls.statement.printed_returns]
+    returns = build_returns(tx, printed)
     cashflow = build_cashflow(accounts, returns.count_by_month())
     daily: dict[date, Decimal] = {}
     for acc in accounts:

@@ -59,7 +59,7 @@ RULES: list[tuple[str, re.Pattern]] = [
 # Transfers within the bank (own or third party). Checked after the bank's code column.
 TRANSFER_RULE = _r(r"^inf/|\binft\b|\bft\s*-|\bfund\s*transfer|\bt(r)?fr?\b|\btpt\b"
                    r"|mb-(quick_)?within|within-dr|\bsb\s*trf|^by\s+sb\b|\bib\s*fund|\bdisbursement\b"
-                   r"|^cms/|^to\s+[a-z]|^mob/|\btpft\b")
+                   r"|^cms/|^to\s+[a-z]|^mob/|\btpft\b|^inb/ift\b")
 
 # Bank code column values (e.g. IOB "COD") that settle the mode when nothing else does
 CODE_MODES = {"CSH": CASH, "CASH": CASH, "CLR": CHEQUE, "CLG": CHEQUE, "TRF": TRANSFER}
