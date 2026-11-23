@@ -6,7 +6,7 @@ unknown entries are not "recurring payments".
 
 Inside each party, payments are grouped by amount (and by mandate, for auto-debits):
 - an amount paid 3+ times gets its own line (2+ for a mandate or loan account, or when
-  the party has only a few payments; at most 5 such lines per party); near-equal amounts (within 0.5%) join it
+  the party has only a few payments; at most 8 such lines per party); near-equal amounts (within 0.5%) join it
   and are listed as the odd ones ("30,000 x 3 / 30,010.50 x 1 (14 Oct)");
 - one or two one-off amounts next to repeated ones are "Additional payment" lines;
 - otherwise the one-offs share a single "Variable amounts" line.
@@ -30,7 +30,7 @@ NEAR = Decimal("0.005")  # amounts within 0.5% of a repeated amount join it
 MAX_EXTRA_LINES = 2  # more one-offs than this are shown as one "Variable amounts" line
 MIN_REPEAT = 3  # times an amount must recur for its own line (2 for mandates, loans, or small parties)
 SMALL_PARTY = 6  # payments; up to this many, an amount paid twice already counts as repeated
-MAX_AMOUNT_LINES = 5  # busy parties: the rest go into "Variable amounts"
+MAX_AMOUNT_LINES = 8  # busy parties: the rest go into "Variable amounts"
 
 MANDATE = re.compile(r"mandate\s+([A-Z0-9]+)", re.I)
 BANK_LOAN = re.compile(r"^(?P<bank>.+?)\s+loan\s+(?P<acc>a/c\s*\S+)$", re.I)
