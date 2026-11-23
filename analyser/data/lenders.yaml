@@ -1,0 +1,174 @@
+# Known lenders. One list used by every section (loans, recurring, flags).
+#
+# match: pieces of the name with spaces removed, upper case. A party or description
+#        containing any of them is this lender. Keep them specific enough not to catch
+#        ordinary businesses.
+# type:  Bank | NBFC | Fintech | Microfinance | Housing finance | Gold loan | Chit fund
+#
+# Add new lenders at the end of the right group. Phase 4 (AI) will suggest new ones.
+
+- name: Bajaj Finance
+  type: NBFC
+  match: [BAJAJFIN, BAJAJFINOTP, BFL0, BAJAJHOUSING]
+- name: Aditya Birla Finance
+  type: NBFC
+  match: [ADITYABIRLAFIN, ABFL, ADITYABIRLACAP]
+- name: Tata Capital
+  type: NBFC
+  match: [TATACAPITAL, TATACAP]
+- name: Cholamandalam Finance
+  type: NBFC
+  match: [CHOLAMANDALAM, CHOLAMS, CIFCL]
+- name: Shriram Finance
+  type: NBFC
+  match: [SHRIRAMFIN, SHRIRAMTRANS, SHRIRAMCITY, SHRIRAMCAP]
+- name: Mahindra Finance
+  type: NBFC
+  match: [MAHINDRAFIN, MAHINDRAANDMAHINDRAFIN, MMFSL]
+- name: Sundaram Finance
+  type: NBFC
+  match: [SUNDARAMFIN]
+- name: L&T Finance
+  type: NBFC
+  match: [LTFINANCE, LNTFIN, LANDTFIN, LTFH]
+- name: HDB Financial
+  type: NBFC
+  match: [HDBFIN, HDBFINANCIAL]
+- name: Hero FinCorp
+  type: NBFC
+  match: [HEROFINCORP]
+- name: IIFL Finance
+  type: NBFC
+  match: [IIFL]
+- name: Poonawalla Fincorp
+  type: NBFC
+  match: [POONAWALLA]
+- name: SMFG India Credit (Fullerton)
+  type: NBFC
+  match: [FULLERTON, SMFGINDIA, SMFG]
+- name: Kotak Mahindra Prime
+  type: NBFC
+  match: [KOTAKMAHINDRAPRIME, KOTAKPRIME]
+- name: TVS Credit
+  type: NBFC
+  match: [TVSCREDIT]
+- name: Piramal Finance
+  type: NBFC
+  match: [PIRAMALCAP, PIRAMALFIN]
+- name: Fedbank Financial Services
+  type: NBFC
+  match: [FEDBANKFIN, FEDFINA]
+- name: Muthoot Capital / Muthoot Fincorp
+  type: NBFC
+  match: [MUTHOOTCAP, MUTHOOTFINCORP]
+- name: IndoStar Capital
+  type: NBFC
+  match: [INDOSTAR]
+- name: Five Star Business Finance
+  type: NBFC
+  match: [FIVESTARBUS, FIVESTARFIN]
+- name: Ambit Finvest
+  type: NBFC
+  match: [AMBITFIN]
+- name: Aavas Financiers
+  type: Housing finance
+  match: [AAVAS]
+- name: Vastu Housing Finance
+  type: Housing finance
+  match: [VASTUHOUS]
+- name: Muthoot Finance
+  type: Gold loan
+  match: [MUTHOOT]
+- name: Manappuram Finance
+  type: Gold loan
+  match: [MANAPPURAM]
+- name: Lendingkart
+  type: Fintech
+  match: [LENDINGKAR]
+- name: Indifi
+  type: Fintech
+  match: [INDIFI]
+- name: Epimoney
+  type: Fintech
+  match: [EPIMONEY]
+- name: Slice
+  type: Fintech
+  match: [SLICE00, ACHDSLICE, SLICEPAY, NESFB]
+- name: KreditBee
+  type: Fintech
+  match: [KREDITBEE, KRAZYBEE]
+- name: Navi
+  type: Fintech
+  match: [NAVIFIN, NAVITECH]
+- name: MoneyView
+  type: Fintech
+  match: [MONEYVIEW, WHIZDM]
+- name: PaySense
+  type: Fintech
+  match: [PAYSENSE]
+- name: FlexiLoans
+  type: Fintech
+  match: [FLEXILOANS, EPIMONEYFLEXI]
+- name: NeoGrowth
+  type: Fintech
+  match: [NEOGROWTH]
+- name: U GRO Capital
+  type: Fintech
+  match: [UGROCAP]
+- name: Axio (Capital Float)
+  type: Fintech
+  match: [CAPITALFLOAT, AXIOFIN]
+- name: Fibe (EarlySalary)
+  type: Fintech
+  match: [EARLYSALARY, SOCIALWORTH, FIBE0]
+- name: CASHe
+  type: Fintech
+  match: [CASHEFIN, BHANIXFIN]
+- name: Stashfin
+  type: Fintech
+  match: [STASHFIN, AKARACAP]
+- name: mPokket
+  type: Fintech
+  match: [MPOKKET]
+- name: Oxyzo
+  type: Fintech
+  match: [OXYZO]
+- name: ZestMoney
+  type: Fintech
+  match: [ZESTMONEY]
+- name: LazyPay
+  type: Fintech
+  match: [LAZYPAY]
+- name: Ujjivan Small Finance Bank
+  type: Microfinance
+  match: [UJJIVAN]
+- name: Equitas Small Finance Bank
+  type: Microfinance
+  match: [EQUITASSMALL, EQUITASSFB]
+- name: Suryoday Small Finance Bank
+  type: Microfinance
+  match: [SURYODAY]
+- name: ESAF Small Finance Bank
+  type: Microfinance
+  match: [ESAFSMALL, ESAFSFB]
+- name: Jana Small Finance Bank (loan)
+  type: Microfinance
+  match: [JANASMALLFINANCEBANKLOAN, JANASFBLOAN]
+- name: Spandana Sphoorty
+  type: Microfinance
+  match: [SPANDANA]
+- name: CreditAccess Grameen
+  type: Microfinance
+  match: [CREDITACCESS, GRAMEENKOOTA]
+- name: LIC Housing Finance
+  type: Housing finance
+  match: [LICHOUSING, LICHFL]
+- name: PNB Housing Finance
+  type: Housing finance
+  match: [PNBHOUSING]
+- name: Shriram Chits
+  type: Chit fund
+  match: [SHRIRAMCHIT]
+- name: Margadarsi Chit Fund
+  type: Chit fund
+  match: [MARGADARSI]
