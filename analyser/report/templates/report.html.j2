@@ -172,32 +172,38 @@ A party is shown when paid 3 or more times across 2 or more months (₹10,000+ i
 </section>
 
 {# ============================================================ LOANS #}
-<section class="page">
-<h2>Loan Txns</h2>
-{% if r.loans %}
-<table class="grid">
-  <thead><tr><th>Lender</th><th>Type</th><th class="n">Usual EMI</th><th class="n">Paid</th><th class="n">Payments</th>
-    <th>Months missed</th><th>Paid in pieces</th><th class="n">Received</th></tr></thead>
-  <tbody>
-  {% for ln in r.loans %}
-    <tr><td><b>{{ ln.lender }}</b></td><td>{{ ln.type }}</td><td class="n">{{ ln.emi|inr2 if ln.emi else '–' }}</td>
-      <td class="n">{{ ln.paid_total|inr_or_blank }}</td><td class="n">{{ ln.payments or '–' }}</td>
-      <td class="{{ 'warn' if ln.months_missed }}">{{ months(ln.months_missed) }}</td>
-      <td class="{{ 'warn' if ln.months_split }}">{{ months(ln.months_split) }}</td>
-      <td class="n">{{ ln.received_total|inr_or_blank }}</td></tr>
+<section class="page loans">
+<div class="pagehead">
+  <div><h1>Loan transactions</h1><div class="muted">{{ accounts_line }} · grouped by lender and payment mandate</div></div>
+  <div class="period">{{ short_period }}</div>
+</div>
+{% if loan_blocks %}
+<div class="stats">
+  <div><div class="label">Total paid{% if loan_has_chit %} · including chit fund{% endif %}</div><div class="big">₹{{ loan_paid|inr }}</div></div>
+  <div><div class="label">Usual EMIs · {{ loan_emis|length }} payment stream{{ 's' if loan_emis|length != 1 }}</div><div class="big">₹{{ loan_emis|sum|inr }}</div></div>
+  <div><div class="label">Payments</div><div class="big">{{ r.loans|sum(attribute='payments') }}</div></div>
+  {% if loan_received %}<div><div class="label">Received from lenders</div><div class="big">₹{{ loan_received|inr }}</div></div>{% endif %}
+</div>
+<table class="loantable">
+  <colgroup><col style="width:15%"><col style="width:16%"><col style="width:19%"><col></colgroup>
+  <thead><tr><th>Date{% if loan_year %} · {{ loan_year }}{% endif %}</th><th class="n">Paid (₹)</th><th class="n">Bank balance (₹)</th><th>Payment details</th></tr></thead>
+  {% for b in loan_blocks %}
+  <tbody class="lender">
+    <tr class="lhead"><td colspan="3"><div class="lname">{{ b.title }}</div><div class="sub">{{ b.subline }}</div></td>
+      <td class="n lpaid">{% if b.paid %}Paid ₹{{ b.paid|inr }}{% endif %}{% if b.received %}<div>Received ₹{{ b.received|inr }}</div>{% endif %}</td></tr>
+    {% for t, what in b.rows %}
+    <tr class="{{ 'in' if t.credit }}">
+      <td>{{ t.date.strftime('%d %b') if loan_year else t.date.strftime('%d %b %y') }}</td>
+      <td class="n amt">{% if t.credit %}+{{ t.credit|inr2 }}{% else %}{{ t.debit|inr2 }}{% endif %}</td>
+      <td class="n">{{ t.balance|inr }}</td>
+      <td>{{ what }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
   {% endfor %}
-  </tbody>
 </table>
-<h3>All loan entries</h3>
-<table class="grid">
-  <thead><tr><th>Date</th><th>Description</th><th>Chq no</th><th class="n">Credit</th><th class="n">Debit</th><th class="n">Balance</th><th>Lender</th></tr></thead>
-  <tbody>
-  {% for ln in r.loans %}{% for t in ln.entries %}
-    <tr><td class="nw">{{ t.date|d }}</td><td>{{ t.description }}</td><td>{{ t.cheque_no or '' }}</td>
-      <td class="n">{{ t.credit|inr2_or_blank }}</td><td class="n">{{ t.debit|inr2_or_blank }}</td><td class="n">{{ t.balance|inr }}</td><td>{{ ln.lender }}</td></tr>
-  {% endfor %}{% endfor %}
-  </tbody>
-</table>
+<p class="note">Bank balance is the statement balance after each entry. Payment groups are based on the transaction narration.
+"+" marks money received from the lender.</p>
 {% else %}<p class="muted">No loan payments or disbursements found.</p>{% endif %}
 </section>
 

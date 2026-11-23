@@ -5,6 +5,7 @@ last payment, months paid in pieces, bounced payments, and money received (disbu
 """
 from __future__ import annotations
 
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -93,3 +94,110 @@ def build_loans(transactions: list[Transaction], returns: ReturnsSection) -> lis
         loans.append(loan)
     loans.sort(key=lambda x: (-(x.paid_total + x.received_total), x.lender))
     return loans
+
+
+# ---------------------------------------------------------------- report wording
+_MANDATE = re.compile(r"^(?P<who>.+?)\s*\(mandate\s+(?P<ref>[A-Z0-9]+)\)\s*$", re.I)
+_BANK_LOAN = re.compile(r"\bloan\s+a/c\b", re.I)
+_PLAIN_TYPES = {"Bank", "Lender not named", "Chit fund"}  # already clear from the name / wording
+
+
+@dataclass
+class LoanBlock:
+    """One lender (or one mandate) as shown on the loan page."""
+    title: str
+    subline: str
+    paid: Decimal
+    received: Decimal
+    rows: list[tuple[Transaction, str]]  # (entry, what it is)
+
+
+def _short_refs(refs: list[str]) -> dict[str, str]:
+    """4 characters that tell the mandates apart. Refs often end alike (a shared date tail),
+    so that shared tail is skipped: ...04695702202606 / ...04696840202606 -> 5702 / 6840."""
+    refs = sorted(set(refs))
+    tail = 0
+    if len(refs) > 1:
+        while tail < min(map(len, refs)) and len({r[len(r) - tail - 1] for r in refs}) == 1:
+            tail += 1
+    out = {}
+    for r in refs:
+        core = r[:len(r) - tail] if len(r) - tail >= 4 else r
+        out[r] = core[-4:]
+    if len(set(out.values())) < len(out):  # still clashing: longest needed plain tail
+        for r in refs:
+            n = 4
+            while n < len(r) and any(o != r and o.endswith(r[-n:]) for o in refs):
+                n += 1
+            out[r] = r[-n:]
+    return out
+
+
+def _and(words: list[str]) -> str:
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def _title(s: str) -> str:
+    return s.title() if s.isupper() else s
+
+
+def loan_blocks(loans: list[LenderLoan]) -> list[LoanBlock]:
+    refs = [m.group("ref") for ln in loans if (m := _MANDATE.match(ln.lender))]
+    short = _short_refs(refs)
+    blocks = []
+    for ln in loans:
+        m = _MANDATE.match(ln.lender)
+        mandate = bool(m)
+        if m:
+            title = f"{m.group('who')} · mandate …{short[m.group('ref')]}"
+        else:
+            title = _title(ln.lender)
+        bank_loan = bool(_BANK_LOAN.search(ln.lender))
+        installment = ln.lender == "Auto-debit installment"
+        chit = ln.type == "Chit fund"
+
+        rows, extra = [], 0
+        for t in ln.entries:
+            if t.credit:
+                what = "Loan amount received"
+            elif chit:
+                what = "Chit fund payment"
+            elif mandate:
+                regular = ln.emi is None or t.debit == ln.emi
+                extra += not regular
+                what = "Monthly auto-debit" if regular else "Additional auto-debit"
+            elif installment:
+                what = "Monthly installment"
+            elif bank_loan or (ln.emi and t.debit == ln.emi):
+                what = "EMI payment"
+            else:
+                what = f"Payment · {t.mode}"
+            rows.append((t, what))
+
+        n = ln.payments
+        bits = [] if ln.type in _PLAIN_TYPES else [ln.type]
+        bits.append(f"{n} payment{'s' if n != 1 else ''}")
+        if ln.months_split:
+            bits.append(f"split EMI entries in {_and([f'{x:%B}' for x in ln.months_split])}")
+        elif chit:
+            bits.append("transfer to chit fund" if any(t.mode == "Transfer" for t in ln.entries if t.debit)
+                        else "chit fund payment")
+        elif mandate:
+            bits.append("monthly auto-debit" + (f" and {'one' if extra == 1 else extra} additional debit"
+                                                f"{'s' if extra > 1 else ''}" if extra else ""))
+        elif installment:
+            bits.append("ACH installment")
+        elif bank_loan:
+            bits.append("EMI installment")
+        if ln.months_missed:
+            bits.append("no payment in " + _and([f"{x:%b %Y}" for x in ln.months_missed]))
+        if ln.received_total:
+            bits.append(f"₹{_inr(ln.received_total)} received from this lender")
+        blocks.append(LoanBlock(title=title, subline=" · ".join(bits) if n else " · ".join(bits[1:] or bits),
+                                paid=ln.paid_total, received=ln.received_total, rows=rows))
+    return blocks
+
+
+def _inr(x: Decimal) -> str:
+    from analyser.sections.flags import inr
+    return inr(x)

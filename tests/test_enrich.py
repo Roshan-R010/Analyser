@@ -260,3 +260,23 @@ def test_recurring_amount_lines():
     loan = "Axis Bank loan a/c …1234"
     lines = amount_lines([P(5, 8, "16170", loan), P(5, 9, "16170", loan)], "C")
     assert lines[0].note == "Axis Bank loan · a/c …1234"
+
+
+def test_loan_page_wording():
+    from analyser.sections.loans import _short_refs, build_loans, loan_blocks
+    from analyser.sections.returns import build_returns
+    # Mandates that end alike are told apart by the digits before the shared tail
+    assert _short_refs(["UTIBDE01111111202606", "UTIBDE02222222202606"]) == {
+        "UTIBDE01111111202606": "1111", "UTIBDE02222222202606": "2222"}
+    assert _short_refs(["ABCD12345678"]) == {"ABCD12345678": "5678"}
+    m = "Auto-debit via X (mandate UTIBDE01111111202606)"
+    tx = [T("ECS/a", debit=a, d=date(2026, mo, dy), lender=m, lender_type="Lender not named", mode="ECS/NACH")
+          for a, mo, dy in [("100", 8, 5), ("100", 9, 5), ("500", 9, 30), ("100", 10, 5)]]
+    tx.append(T("NEFT/loan", credit="9000", d=date(2026, 8, 1), lender=m, lender_type="Lender not named"))
+    tx.sort(key=lambda t: t.date)
+    (b,) = loan_blocks(build_loans(tx, build_returns(tx)))
+    assert b.title == "Auto-debit via X · mandate …2606"  # one mandate: plain last 4
+    assert "4 payments · monthly auto-debit and one additional debit" in b.subline
+    assert "received" in b.subline
+    assert [w for _, w in b.rows] == ["Loan amount received", "Monthly auto-debit", "Monthly auto-debit",
+                                      "Additional auto-debit", "Monthly auto-debit"]

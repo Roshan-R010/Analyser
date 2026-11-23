@@ -102,3 +102,22 @@ table.cptable td.special { color: var(--ink2); font-style: italic; }
 
 /* Months flow on: a short month shares the page; a month never splits unless it is longer than a page */
 .cpmonth { break-inside: avoid; margin-bottom: 22px; }
+
+/* ---------- Loan transactions ---------- */
+.loans { font-size: 9.6px; }
+.stats { display: flex; gap: 48px; margin: 0 0 12px; }
+.stats .label { color: var(--ink2); font-size: 8.6px; margin-bottom: 2px; }
+.stats .big { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+table.loantable { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table.loantable thead th { font-size: 7.8px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink);
+                           padding: 7px 6px; border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2); text-align: left; }
+table.loantable td { padding: 6px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.loantable td + td { border-left: 1px solid var(--line); }
+table.loantable tbody.lender { break-inside: avoid; }
+table.loantable tbody.lender tr:last-child td { border-bottom: 1px solid var(--line2); }
+table.loantable tr.lhead td { border-left: 0; padding: 16px 6px 6px; border-bottom: 1px solid var(--line2); }
+table.loantable tr.lhead td:first-child { border-left: 3px solid var(--blue); padding-left: 8px; }
+table.loantable .lname { color: var(--blue); font-size: 11.5px; font-weight: 600; }
+table.loantable .lpaid { color: var(--blue); font-weight: 600; font-size: 8.6px; vertical-align: top; padding-top: 18px; }
+table.loantable td.amt { font-weight: 600; }
+table.loantable tr.in td.amt { color: var(--good); }

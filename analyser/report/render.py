@@ -16,6 +16,7 @@ from analyser.analysis import Report
 from analyser.profiles import load_profiles
 from analyser.report import charts
 from analyser.sections.flags import inr as _inr
+from analyser.sections.loans import loan_blocks
 from analyser.sections.returns import FUNDS
 
 TEMPLATES = Path(__file__).parent / "templates"
@@ -106,6 +107,7 @@ def render_html(r: Report, generated: datetime | None = None) -> str:
     last = max((s.statement.period_to for s in r.statements if s.statement.period_to), default=None)
     rec_dates = [d for x in r.recurring for d in x.dates]
     rec_years = sorted({d.year for d in rec_dates})
+    loan_years = sorted({t.date.year for ln in r.loans for t in ln.entries})
     return env.get_template("report.html.j2").render(
         r=r, css=(TEMPLATES / "report.css").read_text(encoding="utf-8"),
         period=f"{_d(first)} – {_d(last)}", short_period=_short_period(first, last),
@@ -113,6 +115,11 @@ def render_html(r: Report, generated: datetime | None = None) -> str:
                                  if a.account_no else names.get(a.bank, a.bank.upper()) for a in r.accounts),
         rec_year=str(rec_years[0]) if len(rec_years) == 1 else "",
         month_dates=_month_dates, title=_title,
+        loan_blocks=loan_blocks(r.loans), loan_year=str(loan_years[0]) if len(loan_years) == 1 else "",
+        loan_paid=sum((ln.paid_total for ln in r.loans), Decimal(0)),
+        loan_received=sum((ln.received_total for ln in r.loans), Decimal(0)),
+        loan_emis=[ln.emi for ln in r.loans if ln.emi and ln.payments],
+        loan_has_chit=any(ln.type == "Chit fund" and ln.payments for ln in r.loans),
         generated=f"{(generated or datetime.now()):%d %b %Y, %I:%M %p}",
         bank_name=lambda b: names.get(b, b.upper()), mask=_mask, amounts=_amounts, dates=_dates, months=_months,
         funds_count=sum(1 for b in r.returns.bounces if b.kind == FUNDS),

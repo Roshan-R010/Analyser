@@ -60,7 +60,7 @@ def test_analysis_on_made_up_statement(report):
 
 def test_html_has_every_section(report):
     html = render_html(report)
-    for heading in ("Flags", "Cashflow Summary", "Chq/ECS Return Txns", "Recurring payments", "Loan Txns",
+    for heading in ("Flags", "Cashflow Summary", "Chq/ECS Return Txns", "Recurring payments", "Loan transactions",
                     "CounterParty Totals", "Unknown Txns", "Chq No Wise Txns", "Visual Analytics"):
         assert heading in html, heading
     assert html.count("<svg") == 4
