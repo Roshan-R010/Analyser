@@ -69,6 +69,26 @@ def _dates(ds: list[date]) -> str:
     return " · ".join(f"{m} ({n})" for m, n in per.items())
 
 
+def _month_dates(ds: list[date], with_year: bool = False) -> str:
+    """Aug 07, 14, 19 · Sep 01 (the year is in the column heading unless with_year)."""
+    out: dict[str, list[str]] = {}
+    for d in sorted(ds):
+        out.setdefault(f"{d:%b %y}" if with_year else f"{d:%b}", []).append(f"{d:%d}")
+    return " · ".join(f"{m} {', '.join(days)}" for m, days in out.items())
+
+
+def _title(name: str) -> str:
+    """RAMESH V -> Ramesh V; leaves mixed-case names alone."""
+    return name.title() if name.isupper() else name
+
+
+def _short_period(a: date | None, b: date | None) -> str:
+    if not a or not b:
+        return "–"
+    left = f"{a:%d %b}" if a.year == b.year else f"{a:%d %b %Y}"
+    return f"{left} – {b:%d %b %Y}"
+
+
 def _months(ms: list[date]) -> str:
     return ", ".join(f"{m:%b %y}" for m in ms) if ms else "–"
 
@@ -84,9 +104,16 @@ def render_html(r: Report, generated: datetime | None = None) -> str:
     labels = [f"{m.month:%b %y}" for m in cf.months]
     first = min((s.statement.period_from for s in r.statements if s.statement.period_from), default=None)
     last = max((s.statement.period_to for s in r.statements if s.statement.period_to), default=None)
+    rec_dates = [d for x in r.recurring for d in x.dates]
+    rec_years = sorted({d.year for d in rec_dates})
     return env.get_template("report.html.j2").render(
         r=r, css=(TEMPLATES / "report.css").read_text(encoding="utf-8"),
-        period=f"{_d(first)} – {_d(last)}", generated=f"{(generated or datetime.now()):%d %b %Y, %I:%M %p}",
+        period=f"{_d(first)} – {_d(last)}", short_period=_short_period(first, last),
+        accounts_line=" · ".join(f"{names.get(a.bank, a.bank.upper())} · Account ending {a.account_no[-4:]}"
+                                 if a.account_no else names.get(a.bank, a.bank.upper()) for a in r.accounts),
+        rec_year=str(rec_years[0]) if len(rec_years) == 1 else "",
+        month_dates=_month_dates, title=_title,
+        generated=f"{(generated or datetime.now()):%d %b %Y, %I:%M %p}",
         bank_name=lambda b: names.get(b, b.upper()), mask=_mask, amounts=_amounts, dates=_dates, months=_months,
         funds_count=sum(1 for b in r.returns.bounces if b.kind == FUNDS),
         chart_bars=charts.bars_in_out(labels, [m.credit for m in cf.months], [m.debit for m in cf.months]),
@@ -96,9 +123,12 @@ def render_html(r: Report, generated: datetime | None = None) -> str:
     )
 
 
-FOOTER = ('<div style="width:100%;font-size:7px;color:#7a7974;padding:0 12mm;display:flex;'
-          'justify-content:space-between;font-family:Segoe UI,Arial,sans-serif">'
-          '<span>{who} · Statement Analysis · computer-generated</span>'
+_CHROME = ('width:100%;font-size:7px;color:#7a7974;padding:0 11mm;display:flex;'
+           'justify-content:space-between;font-family:Inter,Segoe UI,Arial,sans-serif')
+HEADER = (f'<div style="{_CHROME};letter-spacing:.06em;text-transform:uppercase;font-weight:600">'
+          '<span style="color:#0b0b0b">{who}</span><span>Bank statement analysis</span></div>')
+FOOTER = (f'<div style="{_CHROME}">'
+          '<span>{who} · Statement analysis · computer-generated</span>'
           '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>')
 
 
@@ -106,15 +136,16 @@ def print_pdf(html: str, out: Path, borrower: str = "") -> Path:
     from playwright.sync_api import sync_playwright
 
     out = Path(out)
+    who = borrower.replace("<", "").replace("&", "and")
     out.parent.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
         page.set_content(html, wait_until="load")
         page.pdf(path=str(out), format="A4", print_background=True,
-                 margin={"top": "11mm", "bottom": "13mm", "left": "11mm", "right": "11mm"},
-                 display_header_footer=True, header_template="<span></span>",
-                 footer_template=FOOTER.format(who=borrower.replace("<", "").replace("&", "and")))
+                 margin={"top": "14mm", "bottom": "13mm", "left": "11mm", "right": "11mm"},
+                 display_header_footer=True, header_template=HEADER.format(who=who),
+                 footer_template=FOOTER.format(who=who))
         browser.close()
     return out
 

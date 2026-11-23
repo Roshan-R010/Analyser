@@ -225,3 +225,38 @@ def test_printed_returns_become_bounces_and_take_late_charges():
         t.mode = classify(t)
     [b] = build_returns(tx, printed).bounces
     assert b.kind == "Funds" and b.direction == "Issued by borrower" and b.charge_total == D("2183")
+
+
+def test_recurring_patterns():
+    from analyser.sections.recurring import pattern_label
+    d = date
+    assert pattern_label([d(2026, m, 5) for m in (8, 9, 10, 11)], True) == "Monthly · 5th"
+    assert pattern_label([d(2026, 8, 5), d(2026, 9, 7), d(2026, 10, 5)], True) == "Monthly · 5th"  # holiday shift
+    assert pattern_label([d(2026, 8, 13), d(2026, 9, 15), d(2026, 10, 14)], True) == "About monthly"
+    assert pattern_label([d(2026, 9, 25), d(2026, 10, 8), d(2026, 10, 22)], True) == "About fortnightly"
+    assert pattern_label([d(2026, 8, 7), d(2026, 8, 8), d(2026, 9, 20)], True) == "Variable dates"
+    assert pattern_label([d(2026, 8, 7), d(2026, 8, 8), d(2026, 9, 20)], False) == "Irregular"
+    assert pattern_label([d(2026, 8, 1)], True) == "Additional payment"
+
+
+def test_recurring_amount_lines():
+    from analyser.sections.recurring import amount_lines
+    def P(day, month, amt, lender=""):
+        return T("x", debit=amt, d=date(2026, month, day), lender=lender)
+    # Repeated amounts get a line each; a near-equal amount joins with its date listed
+    lines = amount_lines([P(13, 8, "30000"), P(15, 9, "30000"), P(14, 10, "30005.90"), P(14, 11, "30000")], "A")
+    assert len(lines) == 1 and lines[0].count == 4 and lines[0].main_count == 3
+    assert lines[0].odd == [(D("30005.90"), date(2026, 10, 14))]
+    # Different mandates stay apart; a one-off is an additional payment with its mandate
+    m1, m2 = "Auto-debit via X (mandate UTIBDE0000111122223333)", "Auto-debit via X (mandate UTIBDE0000444455556666)"
+    lines = amount_lines([P(5, 8, "100", m1), P(5, 9, "100", m1), P(5, 8, "100", m2), P(5, 9, "100", m2),
+                          P(30, 9, "500", m1)], "X")
+    assert [(ln.amount, ln.count, ln.pattern) for ln in lines][-1] == (D("500"), 1, "Additional payment")
+    assert lines[0].note == "Mandate · …111122223333" and lines[1].note == "Mandate · …444455556666"
+    # All different amounts: one "Variable amounts" line
+    lines = amount_lines([P(1, 8, "100"), P(9, 8, "250"), P(3, 10, "900")], "B")
+    assert len(lines) == 1 and lines[0].amount is None and lines[0].count == 3
+    # Bank loan account shown under the amount
+    loan = "Axis Bank loan a/c …1234"
+    lines = amount_lines([P(5, 8, "16170", loan), P(5, 9, "16170", loan)], "C")
+    assert lines[0].note == "Axis Bank loan · a/c …1234"

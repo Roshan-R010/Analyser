@@ -63,3 +63,39 @@ ul.checks li .muted { color: var(--ink3); }
 .month { break-inside: avoid-page; margin-bottom: 4px; }
 .chart { break-inside: avoid; margin: 2px 0 8px; }
 .statement-pic img { width: 100%; max-height: 255mm; object-fit: contain; object-position: top; border: 1px solid var(--line2); }
+
+/* ---------- Shared page heading (new layout) ---------- */
+.pagehead { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin: 2px 0 12px; }
+.pagehead h1 { font-size: 24px; margin: 0 0 3px; letter-spacing: -0.02em; }
+.pagehead .muted { font-size: 9.5px; }
+.pagehead .period { font-weight: 600; font-size: 10px; white-space: nowrap; }
+.c { text-align: center !important; font-variant-numeric: tabular-nums; }
+
+/* ---------- Recurring payments ---------- */
+.rec { font-size: 9.8px; }
+.statbox { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; padding: 10px 14px; margin-bottom: 12px;
+           border: 1px solid var(--line2); border-radius: 6px; background: var(--zebra); }
+.statbox .label { color: var(--ink2); font-size: 9px; margin-bottom: 2px; }
+.statbox .big { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.statbox .mid { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+table.rectable { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table.rectable th { text-align: left; font-weight: 600; font-size: 9.4px; padding: 6px 6px; border-top: 1px solid var(--line2);
+                    border-bottom: 1.5px solid var(--ink); }
+table.rectable td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.rectable tbody.party { break-inside: avoid; }
+table.rectable tr.band td { background: var(--info-bg); color: var(--blue); font-weight: 700; font-size: 10px;
+                            padding: 5px 6px; border-bottom: 1px solid var(--line2); }
+table.rectable td.dates { font-size: 9px; color: var(--ink2); max-width: none; }
+table.rectable .sub { font-size: 8px; }
+
+/* ---------- Counterparty totals (ProAnalyser layout, neutral colours) ---------- */
+table.cptable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.6px; }
+table.cptable th, table.cptable td { border: 1px solid var(--line2); padding: 5px 5px; vertical-align: middle;
+                                     overflow-wrap: anywhere; }
+table.cptable th.cptitle { background: var(--ink); color: #fff; font-size: 11px; text-align: left; padding: 8px 8px;
+                           text-transform: none; letter-spacing: 0; border-color: var(--ink); }
+table.cptable thead tr:nth-child(2) th { background: var(--head); color: var(--ink2); font-size: 7.8px; font-weight: 700;
+                                         text-transform: uppercase; letter-spacing: .03em; text-align: center; }
+table.cptable td:nth-child(4), table.cptable th:nth-child(4) { border-left: 2px solid var(--ink3); }
+table.cptable tr.tot td { background: var(--head); font-weight: 700; }
+table.cptable td.special { color: var(--ink2); font-style: italic; }

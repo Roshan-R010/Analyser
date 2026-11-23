@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Statement Analysis – {{ r.borrower }}</title>
-<style>{{ css }}</style>
+<style>{{ css|safe }}</style>
 </head>
 <body>
 
@@ -131,21 +131,44 @@
 </section>
 
 {# ============================================================ RECURRING #}
-<section class="page">
-<h2>Recurring Debits</h2>
+<section class="page rec">
+<div class="pagehead">
+  <div><h1>Recurring payments</h1><div class="muted">{{ accounts_line }}</div></div>
+  <div class="period">{{ short_period }}</div>
+</div>
 {% if r.recurring %}
-<table class="grid">
-  <thead><tr><th>Counterparty</th><th>Amounts</th><th class="n">Entries</th><th class="n">Total</th><th>Interval</th><th>Dates</th></tr></thead>
-  <tbody>
+<div class="statbox">
+  <div><div class="label">Total paid to parties shown</div><div class="big">₹{{ r.recurring|sum(attribute='total')|inr }}</div></div>
+  <div><div class="label">Payments</div><div class="mid">{{ r.recurring|sum(attribute='entries') }}</div></div>
+  <div><div class="label">Parties</div><div class="mid">{{ r.recurring|length }}</div></div>
+</div>
+<table class="rectable">
+  <colgroup><col style="width:24%"><col style="width:8%"><col style="width:20%"><col></colgroup>
+  <thead><tr><th>Payment amount</th><th class="c">Count</th><th>Observed pattern</th>
+    <th>Payment dates{% if rec_year %} · {{ rec_year }}{% endif %}</th></tr></thead>
   {% for x in r.recurring %}
-    <tr><td><b>{{ x.party }}</b>{% if x.lender %} <span class="tag loan">Lender</span>{% endif %}<div class="sub">{{ x.description[:60] }}</div></td>
-      <td>{{ amounts(x.amounts) }}</td><td class="n">{{ x.entries }}</td><td class="n">{{ x.total|inr }}</td>
-      <td>{{ x.interval }}</td><td class="dates">{{ dates(x.dates) }}</td></tr>
-  {% endfor %}
+  <tbody class="party">
+    <tr class="band"><td colspan="3">{{ title(x.party) }}</td><td class="n">Total ₹{{ x.total|inr }}</td></tr>
+    {% for ln in x.lines %}
+    <tr>
+      <td>{% if ln.amount is none %}<b>Variable amounts</b>
+          {% elif ln.odd %}<b>₹{{ ln.amount|inr2 }} × {{ ln.main_count }}</b>
+            {% for a, d in ln.odd %}<div class="sub">₹{{ a|inr2 }} × 1 ({{ '%02d %s'|format(d.day, d.strftime('%b')) }})</div>{% endfor %}
+          {% else %}<b>₹{{ ln.amount|inr2 }}</b>{% endif %}
+          {% if ln.note %}<div class="sub">{{ ln.note }}</div>{% endif %}</td>
+      <td class="c">{{ ln.count }}</td>
+      <td>{{ ln.pattern }}</td>
+      <td class="dates">{{ month_dates(ln.dates, not rec_year) }}</td>
+    </tr>
+    {% endfor %}
   </tbody>
+  {% endfor %}
 </table>
-<p class="note">One row per party. Shown when a party is paid 3 or more times across 2 or more months (₹10,000+ in total, or any lender).</p>
-{% else %}<p class="muted">No recurring debits.</p>{% endif %}
+<p class="note"><b>Party totals cover the statement period, not a monthly commitment.</b><br>
+Monthly patterns use actual payment dates. Extra payments stay separate.
+Variable amounts are grouped by party; totals are rounded to the nearest rupee.
+A party is shown when paid 3 or more times across 2 or more months (₹10,000+ in total, or any lender).</p>
+{% else %}<p class="muted">No recurring payments.</p>{% endif %}
 </section>
 
 {# ============================================================ LOANS #}
@@ -179,33 +202,35 @@
 </section>
 
 {# ============================================================ COUNTERPARTIES #}
-<section class="page">
-<h2>CounterParty Totals</h2>
-{% if r.parties.possibly_same %}
-<p class="note">Possibly the same party (kept separate): {% for a, b, s in r.parties.possibly_same[:8] %}<b>{{ r.parties.name(a) }}</b> / <b>{{ r.parties.name(b) }}</b>{{ '; ' if not loop.last }}{% endfor %}</p>
-{% endif %}
 {% for mp in r.month_parties %}
-<div class="month">
-<h3>{{ mp.month|mon }}</h3>
-<div class="cols tight">
-  <table class="grid">
-    <thead><tr><th>Counterparty (Cr)</th><th class="n">Amount</th><th class="n">#</th></tr></thead>
-    <tbody>
-      <tr class="tot"><th>Total</th><td class="n">{{ mp.credit_total|inr }}</td><td class="n">{{ mp.credit_entries }}</td></tr>
-      {% for p in mp.credits %}<tr class="{{ 'special' if p.key.startswith('_') }}"><td>{{ p.name }}</td><td class="n">{{ p.amount|inr }}</td><td class="n">{{ p.entries }}</td></tr>{% endfor %}
-    </tbody>
-  </table>
-  <table class="grid">
-    <thead><tr><th>Counterparty (Dr)</th><th class="n">Amount</th><th class="n">#</th></tr></thead>
-    <tbody>
-      <tr class="tot"><th>Total</th><td class="n">{{ mp.debit_total|inr }}</td><td class="n">{{ mp.debit_entries }}</td></tr>
-      {% for p in mp.debits %}<tr class="{{ 'special' if p.key.startswith('_') }}"><td>{{ p.name }}</td><td class="n">{{ p.amount|inr }}</td><td class="n">{{ p.entries }}</td></tr>{% endfor %}
-    </tbody>
-  </table>
-</div>
-</div>
-{% endfor %}
+<section class="page cp">
+<table class="cptable">
+  <colgroup><col style="width:24%"><col style="width:13%"><col style="width:9%">
+    <col style="width:29%"><col style="width:15%"><col style="width:10%"></colgroup>
+  <thead>
+    <tr><th colspan="6" class="cptitle">CounterParty Totals - {{ mp.month.strftime('%b %Y') }}</th></tr>
+    <tr><th>Counterparty (Cr)</th><th class="n">Amount (Cr)</th><th class="c">Entries (Cr)</th>
+      <th>Counterparty (Dr)</th><th class="n">Amount (Dr)</th><th class="c">Entries (Dr)</th></tr>
+  </thead>
+  <tbody>
+    <tr class="tot"><td>Total ({{ mp.month.strftime('%b %Y') }})</td><td class="n">{{ mp.credit_total|inr }}</td><td class="c">{{ mp.credit_entries }}</td>
+      <td>Total ({{ mp.month.strftime('%b %Y') }})</td><td class="n">{{ mp.debit_total|inr }}</td><td class="c">{{ mp.debit_entries }}</td></tr>
+    {% for i in range([mp.credits|length, mp.debits|length]|max) %}
+    {% set c = mp.credits[i] if i < mp.credits|length else none %}{% set d = mp.debits[i] if i < mp.debits|length else none %}
+    <tr>
+      {% if c %}<td class="{{ 'special' if c.key.startswith('_') }}">{{ title(c.name) }}</td><td class="n">{{ c.amount|inr }}</td><td class="c">{{ c.entries }}</td>
+      {% else %}<td></td><td></td><td></td>{% endif %}
+      {% if d %}<td class="{{ 'special' if d.key.startswith('_') }}">{{ title(d.name) }}</td><td class="n">{{ d.amount|inr }}</td><td class="c">{{ d.entries }}</td>
+      {% else %}<td></td><td></td><td></td>{% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if loop.last and r.parties.possibly_same %}
+<p class="note">Possibly the same party (kept separate): {% for a, b, s in r.parties.possibly_same[:8] %}<b>{{ title(r.parties.name(a)) }}</b> / <b>{{ title(r.parties.name(b)) }}</b>{{ '; ' if not loop.last }}{% endfor %}</p>
+{% endif %}
 </section>
+{% endfor %}
 
 {# ============================================================ UNKNOWN #}
 <section class="page">
