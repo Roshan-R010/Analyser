@@ -30,12 +30,35 @@ CHANNEL_WORDS = {
     "TO", "FROM", "BY", "P2A", "IMPSP2A", "CLG", "CHQ", "PAID", "CTS", "NFS", "MPS", "BIL", "ONL",
     "CMS", "ACH", "ACHD", "NACH", "ECS", "BDECS", "FT", "TPT", "MB", "WITHIN", "QUICK", "NETBANK",
     "MUM", "IN", "NA", "UNKNOW", "RETURN", "RTN", "RETURNED", "VIA", "PAYMENT", "BILL", "VENDORPAYMENT",
-    "PAYMENTS", "TRANSFER", "TRANSACTION", "IMPSTRANSACTION", "FUND", "FUNDS", "ONLINE", "MOB", "MOBILE",
+    "PAYMENTS", "TRANSFER", "TRANSACTION", "IMPSTRANSACTION", "ONLINE", "MOB", "MOBILE",
     "IB", "NB", "INB", "OTHER", "OTHERS", "SB", "CA", "OD", "CC", "ATTN", "REF", "UTR", "INWARD", "OUTWARD",
     "REQPAY", "PAY", "SENT", "RECEIVED", "COLLECT", "MANDATE", "EMI", "NEFTCR", "NEFTDR", "RTGSCR",
     "RTGSDR", "BPAY", "BBPS", "POS", "ECOM", "VPS", "IPS", "PCD", "DEBIT", "CREDIT", "CARD", "REJ",
-    "DISBURSEMENT", "DISB",
+    "DISBURSEMENT", "DISB", "P2M", "P2P", "TPFT", "PUR", "PAYMEN", "PAYME", "PAYM", "ACCOUNT", "REQUES",
 }
+# A piece that is only this (after cleaning) is not a party
+JUNK_NAMES = {"FUND", "FUNDS", "BANK", "TRANSFER", "PAYMENT"}
+# Bank names (squashed, upper case). A description piece that is a bank's name - often
+# truncated ("SOUTH INDI", "FEDERAL BA") - is the counterparty's bank, not the counterparty.
+BANK_NAMES = [
+    "STATEBANK", "SOUTHINDIAN", "CITYUNION", "FEDERALBANK", "KARURVYSYA", "KARURVYSA", "KOTAKMAHINDRA",
+    "CANARABANK", "INDIANBANK", "INDIANOVERSEAS", "UNIONBANK", "BANKOFBARODA", "BANKOFINDIA",
+    "BANKOFMAHARASHTRA", "PUNJABNATIONAL", "PUNJABANDSIND", "IDBIBANK", "IDFCFIRST", "IDFCBANK", "YESBANK",
+    "INDUSIND", "TAMILNADMERCANTILE", "TAMILNADUMERCANTILE", "CATHOLICSYRIAN", "CSBBANK", "DHANLAXMI",
+    "KARNATAKABANK", "RBLBANK", "AUSMALL", "EQUITASSMALL", "UJJIVANSMALL", "ESAFSMALL", "JANASMALL",
+    "SURYODAYSMALL", "AIRTELPAYMENTS", "PAYTMPAYMENTS", "FINOPAYMENTS", "INDIAPOSTPAYMENTS", "JIOPAYMENTS",
+    "HDFCBANK", "ICICIBANK", "AXISBANK", "BANDHANBANK", "DBSBANK", "HSBC", "CITIBANK", "STANDARDCHARTERED",
+    "DEUTSCHEBANK", "CENTRALBANK", "UCOBANK", "JAMMUANDKASHMIR", "SARASWAT", "COSMOSBANK", "TJSB",
+]
+
+
+def is_bank_piece(piece: str) -> bool:
+    if re.search(r"\bBANK\b", piece, re.I):
+        return True
+    s = re.sub(r"[^A-Z]", "", piece.upper())
+    if len(s) < 4:
+        return False
+    return any(s.startswith(b) or (len(s) >= 6 and b.startswith(s)) for b in BANK_NAMES)
 # IMPS remark typed by the sender after the masked account ("...xxxx4612-self")
 SELF_REMARK = re.compile(r"x{3,}\d+\s*-\s*(self|own|own\s*a/?c)\b", re.I)
 # Short bank codes used in UPI/IMPS descriptions, and IFSC prefixes
@@ -82,11 +105,11 @@ class PartyIndex:
         return key
 
 
-def _is_code(word: str) -> bool:
-    w = word.strip(".,()")
+def _is_code(word: str, allow_bank: bool = False) -> bool:
+    w = word.strip(".,()*")
     if not w:
         return True
-    if w.upper() in CHANNEL_WORDS or w.upper() in BANK_CODES:
+    if w.upper() in CHANNEL_WORDS or (w.upper() in BANK_CODES and not allow_bank):
         return True
     if IFSC.match(w):
         return True
@@ -101,31 +124,34 @@ def _is_code(word: str) -> bool:
     return False
 
 
-def _clean_piece(piece: str) -> str:
+def _clean_piece(piece: str, allow_bank: bool = False) -> str:
     words = []
     for w in piece.split():
         m = VPA_LOST_AT.match(w)
         if m and any(c.isdigit() for c in w):
             words.append(m.group(1))
             continue
-        if not _is_code(w):
-            words.append(GLUED_BANK.sub("", w.strip(".,()")))
+        if not _is_code(w, allow_bank):
+            words.append(GLUED_BANK.sub("", w.strip(".,()*")))
     name = " ".join(words)
     name = re.sub(r"\(.*$", "", name)  # "Epimoney(R" -> "Epimoney"
-    name = re.sub(r"\b(BANK|BAN|BANK LTD)\b.*$", "", name, flags=re.I) if re.search(
-        r"\b(BANK|BAN)\b", name, re.I) and len(name.split()) > 1 else name
-    name = re.sub(r"\s+", " ", name).strip(" .-&,")
-    return "" if name.upper() in PLACES else name
+    name = re.sub(r"\s+", " ", name).strip(" .-&,*")
+    return "" if name.upper() in PLACES or name.upper() in JUNK_NAMES else name
 
 
-def extract_name(description: str) -> str:
-    """The party's name as written in the description, or '' if there is none."""
+def extract_name(description: str, allow_bank: bool = False) -> str:
+    """The party's name as written in the description, or '' if there is none.
+
+    allow_bank: the party may be a bank (ECS/ACH debits: "ACH-DR-HDFC BANK LTD-...").
+    """
     text = description or ""
     text = REMARK_AFTER_MASK.split(text)[0]  # drop the free-text remark after a masked account
     text = VPA.sub(" / ", text)
     pieces = re.split(r"[/:|\\]+|-+|_|\s{2,}", text)
     for piece in pieces:
-        name = _clean_piece(piece)
+        if not allow_bank and is_bank_piece(piece):
+            continue
+        name = _clean_piece(piece, allow_bank)
         letters = sum(c.isalpha() for c in name)
         if letters >= 2 and not re.fullmatch(r"(SELF|CASH)", name, re.I):
             return name.upper()
@@ -205,7 +231,7 @@ def assign_parties(transactions: list[Transaction], holders: list[str],
         elif t.mode == M.RETURN:
             special = RETURNS
         else:
-            raw = extract_name(t.description)
+            raw = extract_name(t.description, allow_bank=(t.mode == M.ECS))
             if not raw:
                 sides = dict((s.upper(), d) for s, d in MASKED_SIDE.findall(t.description or ""))
                 other = sides.get("CR") if t.debit else sides.get("DR")
@@ -227,8 +253,8 @@ def assign_parties(transactions: list[Transaction], holders: list[str],
     return _group(transactions)
 
 
-PREFIX_MERGE_MIN = 10  # a truncated name must keep at least this many characters to be merged
-SIMILAR = 88
+PREFIX_MERGE_MIN = 8  # a truncated name must keep at least this many letters to be merged
+SIMILAR = 85
 
 
 def _group(transactions: list[Transaction]) -> PartyIndex:
@@ -274,6 +300,9 @@ def _group(transactions: list[Transaction]) -> PartyIndex:
             if ga == gb or min(len(a), len(b)) < 5:
                 continue
             score = int(fuzz.ratio(a, b))
+            short, long_ = sorted((a, b), key=len)
+            if len(short) >= 4 and long_.startswith(short):
+                score = max(score, 95)  # "ABCD" / "ABCD TRADERS": too short to merge, worth a look
             pair = tuple(sorted((ga, gb)))
             if score >= SIMILAR and score > best.get(pair, 0):
                 best[pair] = score

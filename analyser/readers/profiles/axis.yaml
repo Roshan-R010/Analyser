@@ -1,0 +1,10 @@
+id: axis
+name: Axis Bank
+detect:
+  header: ['\bUTIB0\d{6}\b', 'Axis Bank']
+details:
+  # The holder's name is the first line of the statement, with no label
+  holder: '\A\s*(?P<h>[A-Z][A-Za-z .&]+?)\s*$'
+totals:
+  # Last page: "TRANSACTION TOTAL <debit> <credit>"
+  pattern: 'TRANSACTION\s+TOTAL\s+(?P<debit>[\d,]+\.\d{2})\s+(?P<credit>[\d,]+\.\d{2})'

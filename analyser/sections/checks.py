@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from analyser.model import ZERO, Transaction
+from analyser.verify import printed_checks
 
 
 @dataclass
@@ -30,9 +31,8 @@ def build_checks(report) -> list[Check]:
     for s in report.statements:
         st, v = s.statement, s.check
         detail = f"{v.rows_checked} rows" if v.ok else f"{len(v.breaks)} breaks; {'; '.join(v.problems)}"
-        printed = ""
-        if st.printed_total_debit is not None or st.printed_total_credit is not None:
-            printed = ", matches the bank's printed totals" if v.ok else ""
+        matched = printed_checks(st)
+        printed = f", matches the bank's printed {' and '.join(matched)}" if v.ok and matched else ""
         checks.append(Check(f"Statement {st.statement_no} ({st.bank.upper()}): every balance adds up", v.ok,
                             detail + printed))
     for acc, v in report.account_checks:

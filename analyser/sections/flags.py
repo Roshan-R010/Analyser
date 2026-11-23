@@ -52,8 +52,11 @@ def build_flags(transactions: list[Transaction], daily: dict[date, Decimal], ret
         flags.append(Flag("watch", f"{len(tech)} technical return(s): "
                                    + "; ".join(f"{b.date:%d %b} {b.reason.lower()}" for b in tech[:3])))
     if charge_only:
-        flags.append(Flag("watch", f"{len(charge_only)} return charge(s) for bounces not in this statement "
-                                   f"({', '.join(f'{b.month:%b %Y}' for b in charge_only)})"))
+        def _what(b) -> str:
+            who = " deposited cheque" if b.direction == "Deposited by borrower" else ""
+            return f"{b.month:%b %Y}{who}"
+        flags.append(Flag("watch", f"{len(charge_only)} return charge(s) without the returned entry in the "
+                                   f"statement ({', '.join(_what(b) for b in charge_only)})"))
 
     neg_days = sorted(d for d, b in daily.items() if b < 0)
     if neg_days:

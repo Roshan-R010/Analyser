@@ -27,7 +27,7 @@ def _r(pattern: str) -> re.Pattern:
 
 RULES: list[tuple[str, re.Pattern]] = [
     # Bank charges, GST on charges, return charges
-    (CHARGES, _r(r"\bchgs?\b|\bcharges?\b|\+\s*gst|incl\.?\s*gst|\bgst\s*on\b|\bcommission\b"
+    (CHARGES, _r(r"\bchgs?\b|\bchrgs?\b|\bcharges?\b|\+\s*gst|incl\.?\s*gst|\bgst\s*on\b|\bcommission\b"
                  r"|\bsms\s*(alert|chg)|\bamc\b|\bpenal|min(imum)?\.?\s*bal|non[- ]?maint|\bsc\s*:"
                  r"|service\s*charge|\b[cs]gst\b|\bigst\b|chg[a-z]{3}-|\bprocessing\s*fee|\bannual\s*fee")),
     # Money sent back: cheque returns, rejected clearing, NEFT/RTGS/IMPS/ECS returns, reversals
@@ -58,7 +58,7 @@ RULES: list[tuple[str, re.Pattern]] = [
 # Transfers within the bank (own or third party). Checked after the bank's code column.
 TRANSFER_RULE = _r(r"^inf/|\binft\b|\bft\s*-|\bfund\s*transfer|\bt(r)?fr?\b|\btpt\b"
                    r"|mb-(quick_)?within|within-dr|\bsb\s*trf|^by\s+sb\b|\bib\s*fund|\bdisbursement\b"
-                   r"|^cms/|^to\s+[a-z]")
+                   r"|^cms/|^to\s+[a-z]|^mob/|\btpft\b")
 
 # Bank code column values (e.g. IOB "COD") that settle the mode when nothing else does
 CODE_MODES = {"CSH": CASH, "CASH": CASH, "CLR": CHEQUE, "CLG": CHEQUE, "TRF": TRANSFER}

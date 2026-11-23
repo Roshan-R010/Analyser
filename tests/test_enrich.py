@@ -139,3 +139,45 @@ def test_interval_labels():
     assert interval_label([d + timedelta(days=30 * i) for i in range(5)]) == "Monthly"
     assert interval_label([d + timedelta(days=14 * i) for i in range(5)]) == "Fortnightly"
     assert interval_label([d + timedelta(days=i) for i in range(20)]).startswith("Frequent")
+
+
+@pytest.mark.parametrize("desc,name", [
+    ("CLG/000111/011026/Hdfc Bank /ABC TRADERS", "ABC TRADERS"),  # drawee bank comes first
+    ("CLG/000222/011026/South Indi/XYZ AGENCIES", "XYZ AGENCIES"),  # truncated bank name skipped
+    ("UPI/P2A/100000000001/Bank Account XXXXXXXX/Paymen/ICICI Bank", ""),  # masked payee
+    ("UPI/P2M/100000000002/SOME SHOP /Paymen/YES BANK LIMITED YBS", "SOME SHOP"),
+    ("MOB/TPFT/RAVI KUMAR/9170200300000", "RAVI KUMAR"),
+    ("ECOM PUR/SOMESHOP* CL/CITY/091126/12:32/243776", "SOMESHOP CL"),
+    ("UPI/P2M/100000000003/ABC CHIT FUNDS PRIV /Paymen/KARUR VYSA", "ABC CHIT FUNDS PRIV"),
+])
+def test_names_axis_style(desc, name):
+    assert extract_name(desc) == name
+
+
+def test_auto_debit_to_a_bank_is_a_bank_loan():
+    tx = [T("ACH-DR-HDFC BANK LTD-481200000- UTIB70200000000000", debit="5000", mode="ECS/NACH")]
+    assign_parties(tx, ["SOMEONE"])
+    assert tx[0].party_clean == "HDFC BANK LTD"
+    assert identify(tx[0]) == ("HDFC BANK LTD", "Bank")
+
+
+def test_counterpartys_bank_is_not_a_lender():
+    t = T("UPI/P2A/100000000004/Ravi M /Rent/ESAF SMALL FINANCE B", debit="500", mode="UPI",
+          party_clean="RAVI M", party_key="RAVIM")
+    assert identify(t) == ("", "")
+
+
+def test_more_modes():
+    assert classify(T("Monthly Service Chrgs SEP-26", debit="150")) == "Charges"
+    assert classify(T("MOB/TPFT/RAVI KUMAR/9170200300000", debit="1")) == "Transfer"
+    assert classify(T("ATM-CASH- AXIS/ABCD100000/1111/201026/TOWN", debit="1")) == "Cash"
+
+
+def test_outward_return_charge_with_gst_is_one_deposited_return():
+    from analyser.sections.returns import build_returns
+    tx = [T("Chq Rtn O/W Chrgs", debit="50", d=date(2026, 10, 17)),
+          T("GST @18% on Chq Rtn O/W Chrgs", debit="9", d=date(2026, 10, 17))]
+    for t in tx:
+        t.mode = classify(t)
+    [b] = build_returns(tx).bounces
+    assert b.direction == "Deposited by borrower" and len(b.charges) == 2

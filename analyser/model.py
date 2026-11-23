@@ -56,5 +56,7 @@ class Statement:
     # Totals the bank itself prints (if any), used as an extra cross-check
     printed_total_debit: Decimal | None = None
     printed_total_credit: Decimal | None = None
+    printed_opening: Decimal | None = None
+    printed_closing: Decimal | None = None
     # Anything the reader could not read cleanly (shown in the report, never hidden)
     warnings: list[str] = field(default_factory=list)

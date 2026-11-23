@@ -69,3 +69,14 @@ def test_auto_join_cut_words():
     ]}, bounds={"description": (286.3, 353.5)}, page_no=1, top=0)
     assert _cell(row, "description", "auto") == "MMT/IMPS/600112233445/Raghavendra TRADERS"
     assert _cell(row, "description", " ") == "MMT/IMPS/6 001122334 45/Raghave ndra TRADERS"
+
+
+def test_profile_printed_totals_and_balances():
+    import re as _re
+    from analyser.readers.generic import CLOSING_PRINTED, OPENING_PRINTED, ReaderOptions
+    opts = ReaderOptions.from_profile({"totals": {"pattern": r"TRANSACTION\s+TOTAL\s+(?P<debit>[\d,]+\.\d{2})\s+(?P<credit>[\d,]+\.\d{2})"}})
+    m = _re.search(opts.totals_pattern, "TRANSACTION TOTAL 1279.42 1216.00", _re.I)
+    assert (m.group("debit"), m.group("credit")) == ("1279.42", "1216.00")
+    assert OPENING_PRINTED.search("OPENING BALANCE 128541.23").group(1) == "128541.23"
+    assert CLOSING_PRINTED.search("Closing Balance : 65,191.81 Dr").groups() == ("65,191.81", "Dr")
+    assert CLOSING_PRINTED.search("The closing balance as shown includes funds under clearing") is None

@@ -20,6 +20,9 @@ ISSUED, DEPOSITED = "Issued by borrower", "Deposited by borrower"
 TRANSFER_RETURN = re.compile(r"\b(rtgs|neft|imps)[\s\-/]*(rtn|return|rej)|\brvsl\b|\brevers"
                              r"|\bupi[\s\-]*rev\b", re.I)
 CHARGE_FOR_RETURN = re.compile(r"\brtn\b|return|\bret\b|bounce|dishon|\bsc\s*:", re.I)
+GST_LINE = re.compile(r"^\s*gst\b|\bgst\s*@", re.I)
+OUTWARD = re.compile(r"\bo/w\b|outward", re.I)  # cheque the borrower deposited
+INWARD = re.compile(r"\bi/w\b|\biw\b|inward", re.I)  # cheque the borrower issued
 CHARGE_MONTH = re.compile(r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s\-']*(\d{2,4})", re.I)
 _MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
 
@@ -164,17 +167,28 @@ def _attach_charges(transactions: list[Transaction], bounces: list[Bounce]) -> N
         named = _charge_month(c.description)
         if target is None and named:
             target = next((b for b in bounces if b.month == named and not b.charges), None)
-        # 3. A bounce in the few days before the charge
+        # 3. GST on a return charge: same day as that charge ("GST @18% on Chq Rtn O/W Chrgs")
+        if target is None and GST_LINE.search(c.description):
+            target = next((b for b in reversed(bounces)
+                           if any(x.date == c.date for x in b.charges)), None)
+        # 4. A bounce in the few days before the charge
         if target is None and not named:
             target = next((b for b in reversed(bounces)
                            if timedelta(0) <= c.date - b.date <= timedelta(days=5) and not b.charges), None)
         if target is not None:
             target.charges.append(c)
             continue
-        # The bounce itself isn't in the statement: the charge is the only evidence
+        # The returned entry itself isn't in the statement: the charge is the only evidence
         month = named or _month(c.date)
+        direction = (DEPOSITED if OUTWARD.search(c.description) else
+                     ISSUED if INWARD.search(c.description) else "")
+        if named and named < _month(c.date):
+            note = f"Only the return charge is in the statement; the bounce was in {month:%b %Y}"
+        else:
+            note = "Only the return charge is in the statement; the returned entry is not shown"
+        if direction == DEPOSITED:
+            note += " (a cheque deposited by the borrower came back)"
         bounces.append(Bounce(
             date=c.date, month=month, description=c.description, cheque_no=c.cheque_no,
             amount=ZERO, credit=ZERO, debit=ZERO, balance=c.balance, reason="", kind=UNKNOWN,
-            direction="", charges=[c],
-            note=f"Only the return charge is in the statement; the bounce was in {month:%b %Y}"))
+            direction=direction, charges=[c], note=note))

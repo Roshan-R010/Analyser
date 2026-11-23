@@ -29,6 +29,10 @@ TOTALS_PATTERNS = [
     (re.compile(r"total\s*debits?\s*:?\s*(?:rs\.?|inr|₹)?\s*([\d,]+\.\d{2})", re.I), "debit"),
     (re.compile(r"total\s*credits?\s*:?\s*(?:rs\.?|inr|₹)?\s*([\d,]+\.\d{2})", re.I), "credit"),
 ]
+# Balances the bank prints ("OPENING BALANCE 128541.23", "Closing Balance : 65,191.81 Cr")
+_AMT = r"(?:rs\.?|inr|₹)?\s*(-?[\d,]+\.\d{2})\s*(cr|dr)?\b"
+OPENING_PRINTED = re.compile(r"opening\s*balance\s*:?\s*" + _AMT, re.I)
+CLOSING_PRINTED = re.compile(r"closing\s*balance\s*:?\s*" + _AMT, re.I)
 
 
 @dataclass
@@ -39,12 +43,16 @@ class ReaderOptions:
     #          a space otherwise. For banks with narrow, hard-wrapped columns.
     description_join: str = " "
     extra_columns: list[tuple[str, str]] = field(default_factory=list)  # (heading regex, field)
+    # Bank-specific printed totals: a regex with named groups "debit" and "credit"
+    totals_pattern: str = ""
 
     @classmethod
     def from_profile(cls, raw: dict | None) -> "ReaderOptions":
         cfg = (raw or {}).get("reader") or {}
         extra = [(pat, fld) for pat, fld in (cfg.get("columns") or {}).items()]
-        return cls(description_join=cfg.get("description_join", " "), extra_columns=extra)
+        totals = ((raw or {}).get("totals") or {}).get("pattern", "")
+        return cls(description_join=cfg.get("description_join", " "), extra_columns=extra,
+                   totals_pattern=totals)
 
 
 @dataclass
@@ -86,7 +94,7 @@ def read_statement(pdf, bank: str = "unknown", options: ReaderOptions | None = N
 
     for row in rows:
         _add_row(st, row, options)
-    _read_printed_totals(pdf, st)
+    _read_printed_totals(pdf, st, options)
     if st.opening_balance is None and st.transactions and st.transactions[0].balance is not None:
         first = st.transactions[0]
         st.opening_balance = first.balance - first.amount
@@ -243,14 +251,33 @@ def _add_row(st: Statement, row: RawRow, opt: ReaderOptions) -> None:
     ))
 
 
-def _read_printed_totals(pdf, st: Statement) -> None:
-    """Totals the bank prints itself (usually on the last page)."""
-    text = pdf.pages[-1].extract_text() or ""
-    for pattern, side in TOTALS_PATTERNS:
-        m = pattern.search(text)
+def _money(text: str, side: str | None = None) -> Decimal:
+    value = Decimal(text.replace(",", ""))
+    return -value if (side or "").lower() == "dr" else value
+
+
+def _read_printed_totals(pdf, st: Statement, options: ReaderOptions) -> None:
+    """Totals and balances the bank prints itself, used as extra checks."""
+    first = pdf.pages[0].extract_text() or ""
+    # The totals can sit before a last page of notices: read the last few pages, end first
+    tail_pages = [p.extract_text() or "" for p in pdf.pages[-3:]][::-1]
+    last = next((t for t in tail_pages if re.search(r"total|closing\s*balance", t, re.I)), tail_pages[0])
+    if options.totals_pattern:
+        m = re.search(options.totals_pattern, last, re.I) or re.search(options.totals_pattern, first, re.I)
         if m:
-            value = Decimal(m.group(1).replace(",", ""))
-            if side == "debit":
-                st.printed_total_debit = value
-            else:
-                st.printed_total_credit = value
+            st.printed_total_debit = _money(m.group("debit"))
+            st.printed_total_credit = _money(m.group("credit"))
+    else:
+        for pattern, side in TOTALS_PATTERNS:
+            m = pattern.search(last)
+            if m:
+                if side == "debit":
+                    st.printed_total_debit = _money(m.group(1))
+                else:
+                    st.printed_total_credit = _money(m.group(1))
+    m = OPENING_PRINTED.search(first)
+    if m:
+        st.printed_opening = _money(m.group(1), m.group(2))
+    closings = list(CLOSING_PRINTED.finditer(last))
+    if closings:
+        st.printed_closing = _money(closings[-1].group(1), closings[-1].group(2))

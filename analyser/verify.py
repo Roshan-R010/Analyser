@@ -60,7 +60,25 @@ def verify(st: Statement) -> VerifyResult:
         res.problems.append(f"Total debit read {total_dr} but statement prints {st.printed_total_debit}")
     if st.printed_total_credit is not None and st.printed_total_credit != total_cr:
         res.problems.append(f"Total credit read {total_cr} but statement prints {st.printed_total_credit}")
+    if st.printed_opening is not None and st.printed_opening != st.opening_balance:
+        res.problems.append(f"Opening balance worked out as {st.opening_balance} "
+                            f"but statement prints {st.printed_opening}")
+    last = st.transactions[-1].balance
+    if st.printed_closing is not None and last is not None and st.printed_closing != last:
+        res.problems.append(f"Closing balance read {last} but statement prints {st.printed_closing}")
     return res
+
+
+def printed_checks(st: Statement) -> list[str]:
+    """Which of the bank's own printed figures were matched (for the report's checks list)."""
+    out = []
+    if st.printed_total_debit is not None or st.printed_total_credit is not None:
+        out.append("totals")
+    if st.printed_opening is not None:
+        out.append("opening")
+    if st.printed_closing is not None:
+        out.append("closing balance")
+    return out
 
 
 def _brk(i, t, expected, printed) -> BalanceBreak:

@@ -56,10 +56,16 @@ def identify(t: Transaction) -> tuple[str, str]:
     party = t.party_clean if not t.party_key.startswith("_") else ""
     if NOT_LENDER.search(party) or NOT_LENDER.search(t.description or ""):
         return "", ""
-    squashed_party, squashed_desc = _squash(party), _squash(t.description)
+    squashed_party = _squash(party)
+    # The whole description is only searched for mandates and bill payments: elsewhere it
+    # also names the counterparty's bank ("…/Ravi M/…/ESAF SMALL FINANCE B" is not a loan).
+    squashed_desc = _squash(t.description) if t.mode in (M.ECS, M.BILLPAY) else ""
     for lender in known_lenders():
-        if any(m in squashed_party or m in squashed_desc for m in lender.match):
+        if any(m in squashed_party or (squashed_desc and m in squashed_desc) for m in lender.match):
             return lender.name, lender.type
+    # An auto-debit (ECS/NACH/ACH) to a bank is a loan or card repayment to that bank
+    if t.mode == M.ECS and t.debit and party and re.search(r"\bBANK\b", party, re.I):
+        return party, "Bank"
     if HAND_LOAN.search(t.description or ""):
         return (party or "Hand loan"), "Hand loan"
     if GOLD_LOAN.search(t.description or ""):
