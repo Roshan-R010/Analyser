@@ -1,0 +1,65 @@
+/* Printed report (A4). Table-first, quiet colours; status colours only with an icon + word. */
+:root {
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #7a7974;
+  --line: #e6e5e1; --line2: #d6d5cf; --head: #f4f3ef; --zebra: #fafaf8;
+  --blue: #2a78d6; --critical: #d03b3b; --critical-bg: #fbeaea;
+  --warning-ink: #8a5a00; --warning-bg: #fdf3dc; --good: #0a7a0a; --good-bg: #e7f5e7;
+  --info-bg: #eef4fc;
+}
+* { box-sizing: border-box; }
+html, body { background: #fff; }
+body { font-family: Inter, "Segoe UI", Arial, sans-serif; color: var(--ink); font-size: 9.2px; line-height: 1.35; margin: 0; }
+h1 { font-size: 20px; margin: 2px 0 2px; letter-spacing: -0.01em; }
+h2 { font-size: 13px; margin: 14px 0 6px; padding-bottom: 3px; border-bottom: 2px solid var(--ink); }
+h3 { font-size: 10.5px; margin: 10px 0 4px; }
+.muted { color: var(--ink3); font-weight: normal; }
+.note { color: var(--ink2); font-size: 8.4px; margin: 4px 0 8px; }
+.eyebrow { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink3); }
+.page { break-before: page; }
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 10px;
+       padding-bottom: 8px; border-bottom: 2px solid var(--ink); }
+.verdict { font-weight: 600; padding: 5px 9px; border-radius: 4px; font-size: 10px; white-space: nowrap; }
+.verdict.ok { background: var(--good-bg); color: var(--good); }
+.verdict.bad { background: var(--critical-bg); color: var(--critical); }
+
+table.grid { width: 100%; border-collapse: collapse; margin: 2px 0 6px; }
+table.grid th, table.grid td { border-bottom: 1px solid var(--line); padding: 2.6px 4px; text-align: left; vertical-align: top; }
+table.grid thead th { background: var(--head); border-bottom: 1px solid var(--line2); font-weight: 600; color: var(--ink2);
+                      font-size: 8.4px; text-transform: uppercase; letter-spacing: .03em; }
+table.grid tbody tr:nth-child(even) td { background: var(--zebra); }
+table.grid tbody.sum th, table.grid tbody.sum td { background: var(--head) !important; font-weight: 600; }
+table.grid tr.tot th, table.grid tr.tot td { font-weight: 700; background: var(--head) !important; }
+table.grid tr.special td { color: var(--ink2); font-style: italic; }
+table.grid tr.retn td { background: var(--critical-bg) !important; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+.n { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nw { white-space: nowrap; }
+.neg { color: var(--critical); }
+td.warn, .warn { color: var(--warning-ink); font-weight: 600; }
+.sub { color: var(--ink3); font-size: 8px; margin-top: 1px; }
+.dates { font-size: 8px; color: var(--ink2); max-width: 230px; }
+table.kv th { width: 45%; font-weight: 500; color: var(--ink2); }
+table.accounts td { white-space: nowrap; }
+
+.tag { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 7.8px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.tag.funds { background: var(--critical-bg); color: var(--critical); }
+.tag.technical, .tag.unknown { background: var(--warning-bg); color: var(--warning-ink); }
+.tag.loan { background: var(--info-bg); color: var(--blue); }
+
+ul.flags { list-style: none; padding: 0; margin: 0 0 8px; }
+ul.flags li { padding: 4px 6px; margin: 2px 0; border-radius: 3px; font-size: 9.4px; }
+ul.flags li .badge { display: inline-block; min-width: 52px; font-weight: 700; font-size: 8.2px; text-transform: uppercase; margin-right: 6px; }
+ul.flags li.high { background: var(--critical-bg); } ul.flags li.high .badge { color: var(--critical); }
+ul.flags li.watch { background: var(--warning-bg); } ul.flags li.watch .badge { color: var(--warning-ink); }
+ul.flags li.info { background: var(--info-bg); } ul.flags li.info .badge { color: var(--blue); }
+ul.checks { list-style: none; padding: 0; margin: 0; }
+ul.checks li { padding: 1.5px 0; }
+ul.checks li.ok { color: var(--good); } ul.checks li.bad { color: var(--critical); font-weight: 600; }
+ul.checks li .muted { color: var(--ink3); }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cols.tight { gap: 10px; align-items: start; }
+.month { break-inside: avoid-page; margin-bottom: 4px; }
+.chart { break-inside: avoid; margin: 2px 0 8px; }
+.statement-pic img { width: 100%; max-height: 255mm; object-fit: contain; object-position: top; border: 1px solid var(--line2); }

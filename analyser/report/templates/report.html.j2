@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Statement Analysis – {{ r.borrower }}</title>
+<style>{{ css }}</style>
+</head>
+<body>
+
+{# ============================================================ SUMMARY #}
+<header class="top">
+  <div>
+    <div class="eyebrow">Bank Statement Analysis</div>
+    <h1>{{ r.borrower }}</h1>
+    <div class="muted">{{ period }} · generated {{ generated }}</div>
+  </div>
+  <div class="verdict {{ 'ok' if r.all_checks_ok else 'bad' }}">
+    {% if r.all_checks_ok %}✓ All balances and totals verified{% else %}✕ Some checks failed – see Checks{% endif %}
+  </div>
+</header>
+
+<table class="grid accounts">
+  <thead><tr><th>#</th><th>Bank</th><th>Account holder</th><th>Account</th><th>Period</th>
+    <th class="n">Opening</th><th class="n">Closing</th><th class="n">Entries</th></tr></thead>
+  <tbody>
+  {% for s in r.statements %}{% set st = s.statement %}
+    <tr><td>{{ st.statement_no }}</td><td>{{ bank_name(st.bank) }}</td><td>{{ st.account_holder or '–' }}</td>
+      <td>{{ mask(st.account_no) }}</td><td>{{ st.period_from|d }} – {{ st.period_to|d }}</td>
+      <td class="n">{{ st.opening_balance|inr2 }}</td>
+      <td class="n">{{ (st.transactions[-1].balance if st.transactions else None)|inr2 }}</td>
+      <td class="n">{{ st.transactions|length }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Flags</h2>
+{% if r.flags %}
+<ul class="flags">
+  {% for f in r.flags %}
+  <li class="{{ f.level }}"><span class="badge">{{ {'high': '✕ High', 'watch': '▲ Watch', 'info': 'ℹ Info'}[f.level] }}</span>{{ f.text }}</li>
+  {% endfor %}
+</ul>
+{% else %}<p class="muted">Nothing to flag.</p>{% endif %}
+
+<div class="cols">
+  <div>
+    <h3>Totals</h3>
+    <table class="grid kv">
+      <tr><th>Money in</th><td class="n">{{ r.cashflow.total.credit|inr }}</td><td class="n muted">{{ r.cashflow.total.cr_entries|int }} entries</td></tr>
+      <tr><th>Money out</th><td class="n">{{ r.cashflow.total.debit|inr }}</td><td class="n muted">{{ r.cashflow.total.dr_entries|int }} entries</td></tr>
+      <tr><th>Net</th><td class="n">{{ r.cashflow.total.net|inr }}</td><td></td></tr>
+      <tr><th>Average balance</th><td class="n">{{ r.cashflow.total.avg_balance|inr }}</td><td></td></tr>
+      <tr><th>Bounces (funds / other)</th><td class="n">{{ funds_count }} / {{ r.returns.bounces|length - funds_count }}</td><td></td></tr>
+      <tr><th>Lenders paid</th><td class="n">{{ r.loans|selectattr('payments')|list|length }}</td><td></td></tr>
+    </table>
+  </div>
+  <div>
+    <h3>Checks</h3>
+    <ul class="checks">
+      {% for c in r.checks %}<li class="{{ 'ok' if c.ok else 'bad' }}">{{ '✓' if c.ok else '✕' }} {{ c.name }}{% if c.detail %} <span class="muted">({{ c.detail }})</span>{% endif %}</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+
+{# ============================================================ ORIGINAL STATEMENTS #}
+{% for s in r.statements %}{% if s.first_page_png %}
+<section class="page statement-pic">
+  <h2>Statement {{ s.statement.statement_no }} <span class="muted">· {{ bank_name(s.statement.bank) }} · first page</span></h2>
+  <img src="data:image/png;base64,{{ s.first_page_png|b64 }}" alt="First page of statement {{ s.statement.statement_no }}">
+</section>
+{% endif %}{% endfor %}
+
+{# ============================================================ CASHFLOW #}
+<section class="page">
+<h2>Cashflow Summary</h2>
+<table class="grid cash">
+  <thead><tr><th>Month</th><th class="n">Credit</th><th class="n">Debit</th><th class="n">Net cashflow</th>
+    <th class="n">Avg balance</th><th class="n">Cr entries</th><th class="n">Dr entries</th><th class="n">Chq/ECS returns</th></tr></thead>
+  <tbody>
+  {% for m in r.cashflow.months %}
+    <tr><td>{{ m.label }}</td><td class="n">{{ m.credit|inr }}</td><td class="n">{{ m.debit|inr }}</td>
+      <td class="n {{ 'neg' if m.net < 0 }}">{{ m.net|inr }}</td><td class="n {{ 'neg' if m.avg_balance < 0 }}">{{ m.avg_balance|inr }}</td>
+      <td class="n">{{ m.cr_entries|int }}</td><td class="n">{{ m.dr_entries|int }}</td>
+      <td class="n {{ 'warn' if m.returns }}">{{ m.returns or 'NIL' }}</td></tr>
+  {% endfor %}
+  </tbody>
+  <tbody class="sum">
+  {% for row in [r.cashflow.total, r.cashflow.monthly_avg] %}
+    <tr><th>{{ row.label }}</th><td class="n">{{ row.credit|inr }}</td><td class="n">{{ row.debit|inr }}</td>
+      <td class="n">{{ row.net|inr }}</td><td class="n">{{ row.avg_balance|inr }}</td>
+      <td class="n">{{ row.cr_entries|round|int }}</td><td class="n">{{ row.dr_entries|round|int }}</td><td class="n">–</td></tr>
+  {% endfor %}
+  {% for n in [3, 6, 9, 12] %}{% set row = r.cashflow.last[n] %}
+    <tr><th>Last {{ n }} months{% if row %} <span class="muted">({{ row.label.split('(')[1][:-1] }})</span>{% endif %}</th>
+    {% if row %}<td class="n">{{ row.credit|inr }}</td><td class="n">{{ row.debit|inr }}</td><td class="n">{{ row.net|inr }}</td>
+      <td class="n">{{ row.avg_balance|inr }}</td><td class="n">{{ row.cr_entries|int }}</td><td class="n">{{ row.dr_entries|int }}</td><td class="n">–</td>
+    {% else %}<td class="n muted" colspan="7">not enough months</td>{% endif %}</tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="note">Avg balance = average of each day's closing balance. Returns are counted in the month the bounce happened.</p>
+
+{# ============================================================ RETURNS #}
+<h2>Chq/ECS Return Txns</h2>
+{% if r.returns.bounces %}
+<table class="grid">
+  <thead><tr><th>Date</th><th>Description</th><th>Chq no</th><th class="n">Credit</th><th class="n">Debit</th>
+    <th class="n">Balance</th><th>Reason</th><th class="n">Charge</th></tr></thead>
+  <tbody>
+  {% for b in r.returns.bounces %}
+    <tr><td class="nw">{{ b.date|d }}</td>
+      <td>{{ b.description }}{% if b.direction %}<div class="sub">{{ b.direction }}{% if b.original %} · original {{ b.original.date|d }}{% endif %}</div>{% endif %}{% if b.note %}<div class="sub">{{ b.note }}</div>{% endif %}</td>
+      <td>{{ b.cheque_no or '–' }}</td><td class="n">{{ b.credit|inr_or_blank }}</td><td class="n">{{ b.debit|inr_or_blank }}</td>
+      <td class="n">{{ b.balance|inr }}</td>
+      <td><span class="tag {{ b.kind|lower }}">{{ b.kind }}</span> {{ b.reason }}</td>
+      <td class="n">{{ b.charge_total|inr_or_blank }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">No cheque or ECS returns.</p>{% endif %}
+{% if r.returns.transfer_returns %}
+<h3>Transfers sent back <span class="muted">(not bounces)</span></h3>
+<table class="grid">
+  <thead><tr><th>Date</th><th>Description</th><th class="n">Credit</th><th class="n">Debit</th><th class="n">Balance</th><th>Reason</th></tr></thead>
+  <tbody>{% for x in r.returns.transfer_returns %}{% set t = x.txn %}
+    <tr><td class="nw">{{ t.date|d }}</td><td>{{ t.description }}</td><td class="n">{{ t.credit|inr_or_blank }}</td>
+      <td class="n">{{ t.debit|inr_or_blank }}</td><td class="n">{{ t.balance|inr }}</td><td>{{ x.reason or '–' }}</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% endif %}
+</section>
+
+{# ============================================================ RECURRING #}
+<section class="page">
+<h2>Recurring Debits</h2>
+{% if r.recurring %}
+<table class="grid">
+  <thead><tr><th>Counterparty</th><th>Amounts</th><th class="n">Entries</th><th class="n">Total</th><th>Interval</th><th>Dates</th></tr></thead>
+  <tbody>
+  {% for x in r.recurring %}
+    <tr><td><b>{{ x.party }}</b>{% if x.lender %} <span class="tag loan">Lender</span>{% endif %}<div class="sub">{{ x.description[:60] }}</div></td>
+      <td>{{ amounts(x.amounts) }}</td><td class="n">{{ x.entries }}</td><td class="n">{{ x.total|inr }}</td>
+      <td>{{ x.interval }}</td><td class="dates">{{ dates(x.dates) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="note">One row per party. Shown when a party is paid 3 or more times across 2 or more months (₹10,000+ in total, or any lender).</p>
+{% else %}<p class="muted">No recurring debits.</p>{% endif %}
+</section>
+
+{# ============================================================ LOANS #}
+<section class="page">
+<h2>Loan Txns</h2>
+{% if r.loans %}
+<table class="grid">
+  <thead><tr><th>Lender</th><th>Type</th><th class="n">Usual EMI</th><th class="n">Paid</th><th class="n">Payments</th>
+    <th>Months missed</th><th>Paid in pieces</th><th class="n">Received</th></tr></thead>
+  <tbody>
+  {% for ln in r.loans %}
+    <tr><td><b>{{ ln.lender }}</b></td><td>{{ ln.type }}</td><td class="n">{{ ln.emi|inr2 if ln.emi else '–' }}</td>
+      <td class="n">{{ ln.paid_total|inr_or_blank }}</td><td class="n">{{ ln.payments or '–' }}</td>
+      <td class="{{ 'warn' if ln.months_missed }}">{{ months(ln.months_missed) }}</td>
+      <td class="{{ 'warn' if ln.months_split }}">{{ months(ln.months_split) }}</td>
+      <td class="n">{{ ln.received_total|inr_or_blank }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h3>All loan entries</h3>
+<table class="grid">
+  <thead><tr><th>Date</th><th>Description</th><th>Chq no</th><th class="n">Credit</th><th class="n">Debit</th><th class="n">Balance</th><th>Lender</th></tr></thead>
+  <tbody>
+  {% for ln in r.loans %}{% for t in ln.entries %}
+    <tr><td class="nw">{{ t.date|d }}</td><td>{{ t.description }}</td><td>{{ t.cheque_no or '' }}</td>
+      <td class="n">{{ t.credit|inr2_or_blank }}</td><td class="n">{{ t.debit|inr2_or_blank }}</td><td class="n">{{ t.balance|inr }}</td><td>{{ ln.lender }}</td></tr>
+  {% endfor %}{% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">No loan payments or disbursements found.</p>{% endif %}
+</section>
+
+{# ============================================================ COUNTERPARTIES #}
+<section class="page">
+<h2>CounterParty Totals</h2>
+{% if r.parties.possibly_same %}
+<p class="note">Possibly the same party (kept separate): {% for a, b, s in r.parties.possibly_same[:8] %}<b>{{ r.parties.name(a) }}</b> / <b>{{ r.parties.name(b) }}</b>{{ '; ' if not loop.last }}{% endfor %}</p>
+{% endif %}
+{% for mp in r.month_parties %}
+<div class="month">
+<h3>{{ mp.month|mon }}</h3>
+<div class="cols tight">
+  <table class="grid">
+    <thead><tr><th>Counterparty (Cr)</th><th class="n">Amount</th><th class="n">#</th></tr></thead>
+    <tbody>
+      <tr class="tot"><th>Total</th><td class="n">{{ mp.credit_total|inr }}</td><td class="n">{{ mp.credit_entries }}</td></tr>
+      {% for p in mp.credits %}<tr class="{{ 'special' if p.key.startswith('_') }}"><td>{{ p.name }}</td><td class="n">{{ p.amount|inr }}</td><td class="n">{{ p.entries }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <table class="grid">
+    <thead><tr><th>Counterparty (Dr)</th><th class="n">Amount</th><th class="n">#</th></tr></thead>
+    <tbody>
+      <tr class="tot"><th>Total</th><td class="n">{{ mp.debit_total|inr }}</td><td class="n">{{ mp.debit_entries }}</td></tr>
+      {% for p in mp.debits %}<tr class="{{ 'special' if p.key.startswith('_') }}"><td>{{ p.name }}</td><td class="n">{{ p.amount|inr }}</td><td class="n">{{ p.entries }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+{% endfor %}
+</section>
+
+{# ============================================================ UNKNOWN #}
+<section class="page">
+<h2>Unknown Txns</h2>
+{% if r.unknown.listed %}
+<table class="grid">
+  <thead><tr><th>Date</th><th>Description</th><th>Mode</th><th>Chq no</th><th class="n">Credit</th><th class="n">Debit</th><th class="n">Balance</th></tr></thead>
+  <tbody>{% for t in r.unknown.listed %}
+    <tr><td class="nw">{{ t.date|d }}</td><td>{{ t.description }}</td><td>{{ t.mode }}</td><td>{{ t.cheque_no or '' }}</td>
+      <td class="n">{{ t.credit|inr_or_blank }}</td><td class="n">{{ t.debit|inr_or_blank }}</td><td class="n">{{ t.balance|inr }}</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% endif %}
+<p class="note">Entries where the bank shows no party name, ₹10,000 and above.{% if r.unknown.small_count %} Plus {{ r.unknown.small_count }} smaller entries totalling ₹{{ r.unknown.small_total|inr }}.{% endif %}</p>
+
+{# ============================================================ CHEQUES #}
+<h2>Chq No Wise Txns</h2>
+{% if r.cheques %}
+<table class="grid">
+  <thead><tr><th>Date</th><th>Description</th><th>Chq no</th><th class="n">Credit</th><th class="n">Debit</th><th class="n">Balance</th><th>Counterparty</th></tr></thead>
+  <tbody>{% for t in r.cheques %}
+    <tr class="{{ 'retn' if t.mode == 'Return' }}"><td class="nw">{{ t.date|d }}</td><td>{{ t.description }}</td><td>{{ t.cheque_no }}</td>
+      <td class="n">{{ t.credit|inr_or_blank }}</td><td class="n">{{ t.debit|inr_or_blank }}</td><td class="n">{{ t.balance|inr }}</td><td>{{ t.party_clean or 'Unknown' }}</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">No cheques.</p>{% endif %}
+</section>
+
+{# ============================================================ CHARTS #}
+<section class="page">
+<h2>Visual Analytics</h2>
+<h3>Monthly money in vs money out</h3>
+<div class="chart">{{ chart_bars|safe }}</div>
+<h3>Average monthly balance</h3>
+<div class="chart">{{ chart_line|safe }}</div>
+<div class="cols">
+  <div><h3>Money in by payment mode</h3><div class="chart">{{ chart_modes_in|safe }}</div></div>
+  <div><h3>Money out by payment mode</h3><div class="chart">{{ chart_modes_out|safe }}</div></div>
+</div>
+<p class="note">Percentages add up to exactly 100%. The numbers behind every chart are in the tables above.</p>
+</section>
+
+</body>
+</html>
