@@ -7,6 +7,23 @@
 </head>
 <body>
 
+{# ============================================================ BLOCK TABLE (one style for every page) #}
+{% macro block_table(columns, blocks) %}
+<table class="loantable">
+  <colgroup>{% for c in columns %}<col style="width:{{ c.w }}%">{% endfor %}</colgroup>
+  <thead><tr>{% for c in columns %}<th class="{{ c.c }}">{{ c.name }}</th>{% endfor %}</tr></thead>
+  {% for b in blocks %}
+  <tbody class="lender{{ ' long' if b.rows|length > 18 }}">
+    <tr class="lhead {{ 'bad' if b.bad }}"><td colspan="{{ columns|length - 1 }}"><div class="lname">{{ b.title }}</div><div class="sub">{{ b.subline }}</div></td>
+      <td class="n lpaid">{{ b.right }}</td></tr>
+    {% for row in b.rows %}
+    <tr class="{{ row.cls }}">{% for c in row.cells %}<td class="{{ c.c }}"{% if c.span %} colspan="{{ c.span }}"{% endif %}>{{ c.t }}{% if c.s %}<div class="sub">{{ c.s }}</div>{% endif %}</td>{% endfor %}</tr>
+    {% endfor %}
+  </tbody>
+  {% endfor %}
+</table>
+{% endmacro %}
+
 {# ============================================================ SUMMARY #}
 <header class="top">
   <div>
@@ -71,63 +88,38 @@
 {% endif %}{% endfor %}
 
 {# ============================================================ CASHFLOW #}
-<section class="page">
-<h2>Cashflow Summary</h2>
-<table class="grid cash">
-  <thead><tr><th>Month</th><th class="n">Credit</th><th class="n">Debit</th><th class="n">Net cashflow</th>
-    <th class="n">Avg balance</th><th class="n">Cr entries</th><th class="n">Dr entries</th><th class="n">Chq/ECS returns</th></tr></thead>
-  <tbody>
-  {% for m in r.cashflow.months %}
-    <tr><td>{{ m.label }}</td><td class="n">{{ m.credit|inr }}</td><td class="n">{{ m.debit|inr }}</td>
-      <td class="n {{ 'neg' if m.net < 0 }}">{{ m.net|inr }}</td><td class="n {{ 'neg' if m.avg_balance < 0 }}">{{ m.avg_balance|inr }}</td>
-      <td class="n">{{ m.cr_entries|int }}</td><td class="n">{{ m.dr_entries|int }}</td>
-      <td class="n {{ 'warn' if m.returns }}">{{ m.returns or 'NIL' }}</td></tr>
-  {% endfor %}
-  </tbody>
-  <tbody class="sum">
-  {% for row in [r.cashflow.total, r.cashflow.monthly_avg] %}
-    <tr><th>{{ row.label }}</th><td class="n">{{ row.credit|inr }}</td><td class="n">{{ row.debit|inr }}</td>
-      <td class="n">{{ row.net|inr }}</td><td class="n">{{ row.avg_balance|inr }}</td>
-      <td class="n">{{ row.cr_entries|round|int }}</td><td class="n">{{ row.dr_entries|round|int }}</td><td class="n">–</td></tr>
-  {% endfor %}
-  {% for n in [3, 6, 9, 12] %}{% set row = r.cashflow.last[n] %}
-    <tr><th>Last {{ n }} months{% if row %} <span class="muted">({{ row.label.split('(')[1][:-1] }})</span>{% endif %}</th>
-    {% if row %}<td class="n">{{ row.credit|inr }}</td><td class="n">{{ row.debit|inr }}</td><td class="n">{{ row.net|inr }}</td>
-      <td class="n">{{ row.avg_balance|inr }}</td><td class="n">{{ row.cr_entries|int }}</td><td class="n">{{ row.dr_entries|int }}</td><td class="n">–</td>
-    {% else %}<td class="n muted" colspan="7">not enough months</td>{% endif %}</tr>
-  {% endfor %}
-  </tbody>
-</table>
+<section class="page loans">
+<div class="pagehead">
+  <div><h1>Cashflow Summary</h1><div class="muted">{{ accounts_line }} · month by month</div></div>
+  <div class="period">{{ short_period }}</div>
+</div>
+<div class="stats">
+  <div><div class="label">Money in · {{ r.cashflow.total.cr_entries|int }} entries</div><div class="big">₹{{ r.cashflow.total.credit|inr }}</div></div>
+  <div><div class="label">Money out · {{ r.cashflow.total.dr_entries|int }} entries</div><div class="big">₹{{ r.cashflow.total.debit|inr }}</div></div>
+  <div><div class="label">Net cashflow</div><div class="big">₹{{ r.cashflow.total.net|inr }}</div></div>
+  <div><div class="label">Average balance</div><div class="big">₹{{ r.cashflow.total.avg_balance|inr }}</div></div>
+</div>
+{{ block_table(cash_page.cols, cash_page.blocks) }}
 <p class="note">Avg balance = average of each day's closing balance. Returns are counted in the month the bounce happened.</p>
+</section>
 
 {# ============================================================ RETURNS #}
-<h2>Chq/ECS Return Txns</h2>
-{% if r.returns.bounces %}
-<table class="grid">
-  <thead><tr><th>Date</th><th>Description</th><th>Chq no</th><th class="n">Amount</th>
-    <th class="n">Balance</th><th>Reason</th><th class="n">Charge</th></tr></thead>
-  <tbody>
-  {% for b in r.returns.bounces %}
-    <tr><td class="nw">{{ b.date|d }}</td>
-      <td>{{ b.description }}{% if b.direction %}<div class="sub">{{ b.direction }}{% if b.original %} · original {{ b.original.date|d }}{% endif %}</div>{% endif %}{% if b.note %}<div class="sub">{{ b.note }}</div>{% endif %}</td>
-      <td>{{ b.cheque_no or '–' }}</td><td class="n">{{ b.amount|inr_or_blank }}</td>
-      <td class="n">{{ b.balance|inr }}</td>
-      <td><span class="tag {{ b.kind|lower }}">{{ b.kind }}</span> {{ b.reason }}</td>
-      <td class="n">{{ b.charge_total|inr_or_blank }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
+<section class="page loans">
+<div class="pagehead">
+  <div><h1>Chq/ECS Return Txns</h1><div class="muted">{{ accounts_line }} · grouped by reason</div></div>
+  <div class="period">{{ short_period }}</div>
+</div>
+<div class="stats">
+  <div><div class="label">Returns · {{ funds_count }} for insufficient funds</div><div class="big">{{ r.returns.bounces|length }}</div></div>
+  <div><div class="label">Amount returned</div><div class="big">₹{{ returns_money|inr }}</div></div>
+  <div><div class="label">Return charges</div><div class="big">₹{{ returns_charges|inr }}</div></div>
+  <div><div class="label">Transfers sent back</div><div class="big">{{ r.returns.transfer_returns|length }}</div></div>
+</div>
+{% if returns_page.blocks %}{{ block_table(returns_page.cols, returns_page.blocks) }}
 {% else %}<p class="muted">No cheque or ECS returns.</p>{% endif %}
-{% if r.returns.transfer_returns %}
-<h3>Transfers sent back <span class="muted">(not bounces)</span></h3>
-<table class="grid">
-  <thead><tr><th>Date</th><th>Description</th><th class="n">Credit</th><th class="n">Debit</th><th class="n">Balance</th><th>Reason</th></tr></thead>
-  <tbody>{% for x in r.returns.transfer_returns %}{% set t = x.txn %}
-    <tr><td class="nw">{{ t.date|d }}</td><td>{{ t.description }}</td><td class="n">{{ t.credit|inr_or_blank }}</td>
-      <td class="n">{{ t.debit|inr_or_blank }}</td><td class="n">{{ t.balance|inr }}</td><td>{{ x.reason or '–' }}</td></tr>
-  {% endfor %}</tbody>
-</table>
-{% endif %}
+{% if returns_page.sent_blocks %}{{ block_table(returns_page.sent_cols, returns_page.sent_blocks) }}{% endif %}
+<p class="note">Bank balance is the statement balance after each entry. "+" marks money in.
+Transfers sent back (NEFT / RTGS / IMPS / UPI returns and reversals) are listed apart because they are not cheque bounces.</p>
 </section>
 
 {# ============================================================ RECURRING #}
@@ -209,9 +201,14 @@ A party is shown when paid 3 or more times across 2 or more months (₹10,000+ i
 
 {# ============================================================ COUNTERPARTIES #}
 <section class="page cp">
+<div class="pagehead">
+  <div><h1>Counterparty totals</h1><div class="muted">{{ accounts_line }} · credits and debits by party, month by month</div></div>
+  <div class="period">{{ short_period }}</div>
+</div>
 {% for mp in r.month_parties %}
+{% set rh = [[(840 / ([mp.credits|length, mp.debits|length]|max + 1))|int, 58]|min, 28]|max %}
 <div class="cpmonth">
-<table class="cptable">
+<table class="cptable" style="--rh:{{ rh }}px">
   <colgroup><col style="width:24%"><col style="width:13%"><col style="width:9%">
     <col style="width:29%"><col style="width:15%"><col style="width:10%"></colgroup>
   <thead>

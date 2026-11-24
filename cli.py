@@ -115,6 +115,7 @@ def main() -> int:
     ap.add_argument("--check-only", action="store_true", help="only read and balance-check")
     ap.add_argument("--csv", action="store_true", help="with --check-only: also save transactions as CSV")
     ap.add_argument("--html", action="store_true", help="also save the report as HTML")
+    ap.add_argument("--json", action="store_true", help="also save the key numbers as JSON")
     args = ap.parse_args()
 
     t0 = time.time()
@@ -140,7 +141,7 @@ def main() -> int:
     print("Analysing...")
     report = analyse(good)
     out = args.out or OUT / f"{_safe(report.borrower)}_report.pdf"
-    paths = write_report(report, out, html_copy=args.html)
+    paths = write_report(report, out, html_copy=args.html, json_copy=args.json)
     print(f"\nFlags:")
     for f in report.flags:
         print(f"  [{f.level}] {f.text}")
@@ -149,7 +150,8 @@ def main() -> int:
     for c in bad:
         print(f"  FAILED {c.name}: {c.detail}")
     print(f"\nReport: {paths['pdf']}")
-    print(f"Summary: {paths['json']}")
+    if "json" in paths:
+        print(f"Summary: {paths['json']}")
     if len(good) < len(args.pdfs):
         print(f"Note: {len(args.pdfs) - len(good)} statement(s) left out (see above).")
     print(f"Done in {time.time() - t0:.1f}s")

@@ -15,11 +15,30 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from analyser.analysis import Report
 from analyser.profiles import load_profiles
 from analyser.report import charts
+from analyser.report.blocks import cashflow_page, returns_page
 from analyser.sections.flags import inr as _inr
 from analyser.sections.loans import loan_blocks
 from analyser.sections.returns import FUNDS
 
 TEMPLATES = Path(__file__).parent / "templates"
+FONTS = TEMPLATES / "fonts"
+_RANGES = {
+    "latin": "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+2074,U+20AC,U+2122,"
+             "U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
+    "latin-ext": "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,"
+                 "U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF",
+}
+
+
+def font_css(subsets=("latin", "latin-ext")) -> str:
+    """Inter, embedded in the page so the report looks the same on every machine
+    (latin-ext carries the rupee sign)."""
+    out = []
+    for sub in subsets:
+        data = base64.b64encode((FONTS / f"inter-{sub}.woff2").read_bytes()).decode("ascii")
+        out.append("@font-face{font-family:Inter;font-style:normal;font-weight:100 900;"
+                   f"src:url(data:font/woff2;base64,{data}) format('woff2');unicode-range:{_RANGES[sub]}}}")
+    return "\n".join(out)
 
 
 def inr(x) -> str:
@@ -155,7 +174,10 @@ def render_html(r: Report, generated: datetime | None = None) -> str:
     rec_years = sorted({d.year for d in rec_dates})
     loan_years = sorted({t.date.year for ln in r.loans for t in ln.entries})
     return env.get_template("report.html.j2").render(
-        r=r, css=(TEMPLATES / "report.css").read_text(encoding="utf-8"),
+        r=r, css=font_css() + "\n" + (TEMPLATES / "report.css").read_text(encoding="utf-8"),
+        cash_page=cashflow_page(cf), returns_page=returns_page(r.returns),
+        returns_money=sum((b.amount or 0 for b in r.returns.bounces), Decimal(0)),
+        returns_charges=sum((b.charge_total for b in r.returns.bounces), Decimal(0)),
         period=f"{_d(first)} – {_d(last)}", short_period=_short_period(first, last),
         accounts_line=" · ".join(f"{names.get(a.bank, a.bank.upper())} · Account ending {a.account_no[-4:]}"
                                  if a.account_no else names.get(a.bank, a.bank.upper()) for a in r.accounts),
@@ -178,11 +200,12 @@ def render_html(r: Report, generated: datetime | None = None) -> str:
     )
 
 
+_FONT = "<style>" + font_css(("latin",)) + "</style>"
 _CHROME = ('width:100%;font-size:7px;color:#7a7974;padding:0 11mm;display:flex;'
            'justify-content:space-between;font-family:Inter,Segoe UI,Arial,sans-serif')
-HEADER = (f'<div style="{_CHROME};letter-spacing:.06em;text-transform:uppercase;font-weight:600">'
+HEADER = (_FONT + f'<div style="{_CHROME};letter-spacing:.06em;text-transform:uppercase;font-weight:600">'
           '<span style="color:#0b0b0b">{who}</span><span>Bank statement analysis</span></div>')
-FOOTER = (f'<div style="{_CHROME}">'
+FOOTER = (_FONT + f'<div style="{_CHROME}">'
           '<span>{who} · Statement analysis · computer-generated</span>'
           '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>')
 
@@ -199,8 +222,8 @@ def print_pdf(html: str, out: Path, borrower: str = "") -> Path:
         page.set_content(html, wait_until="load")
         page.pdf(path=str(out), format="A4", print_background=True,
                  margin={"top": "14mm", "bottom": "13mm", "left": "11mm", "right": "11mm"},
-                 display_header_footer=True, header_template=HEADER.format(who=who),
-                 footer_template=FOOTER.format(who=who))
+                 display_header_footer=True, header_template=HEADER.replace('{who}', who),
+                 footer_template=FOOTER.replace('{who}', who))
         browser.close()
     return out
 
@@ -233,13 +256,15 @@ def summary_json(r: Report) -> dict:
     }
 
 
-def write_report(r: Report, out_pdf: Path, html_copy: bool = False) -> dict[str, Path]:
+def write_report(r: Report, out_pdf: Path, html_copy: bool = False, json_copy: bool = False) -> dict[str, Path]:
+    """The report PDF. The HTML and JSON copies are written only when asked for."""
     html = render_html(r)
     out_pdf = Path(out_pdf)
     paths = {"pdf": print_pdf(html, out_pdf, r.borrower)}
-    js = out_pdf.with_suffix(".json")
-    js.write_text(json.dumps(summary_json(r), indent=2), encoding="utf-8")
-    paths["json"] = js
+    if json_copy:
+        js = out_pdf.with_suffix(".json")
+        js.write_text(json.dumps(summary_json(r), indent=2), encoding="utf-8")
+        paths["json"] = js
     if html_copy:
         h = out_pdf.with_suffix(".html")
         h.write_text(html, encoding="utf-8")
