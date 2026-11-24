@@ -56,9 +56,12 @@ def verify(st: Statement) -> VerifyResult:
 
     total_dr = sum((t.debit for t in st.transactions), ZERO)
     total_cr = sum((t.credit for t in st.transactions), ZERO)
-    if st.printed_total_debit is not None and st.printed_total_debit != total_dr:
+    # A bank may net a reversal off the column it was printed in rather than add it to the other
+    ok_dr = {total_dr, total_dr - st.reversal_total}
+    ok_cr = {total_cr, total_cr - st.reversal_total}
+    if st.printed_total_debit is not None and st.printed_total_debit not in ok_dr:
         res.problems.append(f"Total debit read {total_dr} but statement prints {st.printed_total_debit}")
-    if st.printed_total_credit is not None and st.printed_total_credit != total_cr:
+    if st.printed_total_credit is not None and st.printed_total_credit not in ok_cr:
         res.problems.append(f"Total credit read {total_cr} but statement prints {st.printed_total_credit}")
     if st.printed_opening is not None and st.printed_opening != st.opening_balance:
         res.problems.append(f"Opening balance worked out as {st.opening_balance} "

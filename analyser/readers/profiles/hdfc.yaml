@@ -1,0 +1,13 @@
+id: hdfc
+name: HDFC Bank
+detect:
+  header: ['\bHDFC0\w{6}\b', 'HDFC\s*BANK']
+details:
+  # Words are run together in this layout; the name sits on its own line after "M/S."
+  holder: '^(?:M/S\.?\s*)(?P<h>[A-Z][A-Z0-9 .&-]+?)\s*$'
+totals:
+  # Last page: "OpeningBalance DrCount CrCount Debits Credits ClosingBal" then the figures
+  pattern: 'ClosingBal\s+[\d,]+\.\d{2}\s+\d+\s+\d+\s+(?P<debit>[\d,]+\.\d{2})\s+(?P<credit>[\d,]+\.\d{2})'
+reader:
+  description_join: ""
+  # (this layout prints no spaces at all, so a wrapped line continues the word)

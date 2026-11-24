@@ -1,0 +1,11 @@
+id: indian_bank
+name: Indian Bank
+detect:
+  header: ['\bIDIB0\w{6}\b', 'Indian Bank\b']
+details:
+  holder: 'Account Holder Name\s+(?P<h>.+?)\s*$'
+totals:
+  # Page 1 summary: "Total Credits + INR x" ... "Total Debits - INR y"
+  pattern: '(?s)Total Credits \+\s*INR\s*(?P<credit>[\d,]+\.\d{2}).*?Total Debits -\s*INR\s*(?P<debit>[\d,]+\.\d{2})'
+reader:
+  description_join: auto

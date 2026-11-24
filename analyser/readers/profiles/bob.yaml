@@ -1,0 +1,13 @@
+id: bob
+name: Bank of Baroda
+detect:
+  header: ['\bBARB0\w{6}\b', 'Bank of Baroda']
+details:
+  # "Account Number  IFSC Code" heading, then "<number> <IFSC>"
+  account_no: 'Account Number\s+IFSC Code\s*\n(\d{8,20})'
+  # "Account Name  Branch Name" heading, then "<NAME> <BRANCH>" on one line: the branch is the
+  # trailing part that is printed again in the branch address below
+  holder: '(?s)Account Name\s+Branch Name\s*\n(?P<h>.+?)\s+([A-Z][A-Z ]+?)\n(?=.*\b\2\b)'
+reader:
+  # Descriptions run under the "Cheque Number" heading, which is empty
+  fold_into_description: [cheque_no]

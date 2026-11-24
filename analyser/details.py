@@ -45,7 +45,8 @@ def _clean(name: str) -> str:
 def read_details(header: str, profile_raw: dict | None = None) -> Details:
     d = Details()
 
-    m = ACCOUNT_NO.search(header)
+    custom_no = ((profile_raw or {}).get("details") or {}).get("account_no")
+    m = (re.search(custom_no, header, re.M) if custom_no else None) or ACCOUNT_NO.search(header)
     if m:
         d.account_no = m.group(1).replace(" ", "")
 

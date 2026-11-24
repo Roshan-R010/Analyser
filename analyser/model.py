@@ -71,6 +71,9 @@ class Statement:
     printed_closing: Decimal | None = None
     # Returned cheques the bank lists in a separate table (some banks, e.g. Axis, list
     # inward returns only there, not as transactions)
+    # Amounts printed as negative figures (reversals). We count them on the opposite side;
+    # some banks (HDFC) instead net them off in their own printed totals.
+    reversal_total: Decimal = ZERO
     printed_returns: list[PrintedReturn] = field(default_factory=list)
     # Anything the reader could not read cleanly (shown in the report, never hidden)
     warnings: list[str] = field(default_factory=list)

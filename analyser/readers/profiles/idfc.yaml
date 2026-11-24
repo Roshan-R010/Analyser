@@ -1,0 +1,11 @@
+id: idfc
+name: IDFC FIRST Bank
+detect:
+  header: ['\bIDFB0\d{6}\b', 'IDFC\s*FIRST']
+details:
+  holder: 'CUSTOMER NAME\s*:\s*(?P<h>.+?)\s+ACCOUNT BRANCH\s*:'
+totals:
+  # Page 1 summary: "Opening Balance  Total Debit  Total Credit  Closing Balance" then four figures
+  pattern: 'Closing Balance\s+[\d,]+\.\d{2}\s+(?P<debit>[\d,]+\.\d{2})\s+(?P<credit>[\d,]+\.\d{2})\s+[\d,]+\.\d{2}'
+reader:
+  description_join: auto

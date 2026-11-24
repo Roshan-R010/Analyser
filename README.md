@@ -34,7 +34,7 @@ Lenders list: `analyser/data/lenders.yaml` (add new lenders there).
 
 ## Private files (never committed)
 
-- `tests/statements/`: real statements; `passwords.txt`: `filename.pdf = password`
+- `tests/statements/<bank>/`: real statements, one folder per bank profile id (axis, cub, federal, ...); `passwords.txt`: `filename.pdf = password`
 - `tests/expected/`: expected totals per statement
 - `tests/reports/`: ProAnalyser reports for comparison
 - `tests/private/`: tests that use real borrower data
@@ -42,7 +42,7 @@ Lenders list: `analyser/data/lenders.yaml` (add new lenders there).
 
 ## Adding a statement or a new bank
 
-1. Put the PDF in `tests/statements/` (and its password in `passwords.txt`).
+1. Put the PDF in `tests/statements/<bank>/` (and its password in `passwords.txt`).
 2. Run `.venv/Scripts/python tools/make_expected.py <file>.pdf`
    - **Balance check passes:** it writes `tests/expected/<file>.yaml`. Compare the printed
      opening balance, closing balance and transaction count with the statement itself.
@@ -60,5 +60,5 @@ Lenders list: `analyser/data/lenders.yaml` (add new lenders there).
    details:
      holder: '...'                    # only if the holder's name isn't found
    ```
-4. Make a report and look at it: `.venv/Scripts/python cli.py tests/statements/<file>.pdf`
+4. Make a report and look at it: `.venv/Scripts/python cli.py tests/statements/<bank>/<file>.pdf`
 5. Run `.venv/Scripts/python -m pytest -q`. Every statement in the library must still pass.

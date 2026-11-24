@@ -32,9 +32,9 @@ FIELD_RULES: list[tuple[str, str]] = [
 # Used to recognise the heading row itself: at least 3 of these groups present
 HEADING_GROUPS = [
     r"\bdate\b",
-    r"\bbalance\b",
-    r"\b(debit|withdrawal)s?\b",
-    r"\b(credit|deposit)s?\b",
+    r"balance\b",
+    r"\b(debit|withdrawal)",
+    r"\b(credit|deposit)",
     r"\b(particulars|narration|description|remarks|details)\b",
 ]
 
@@ -107,8 +107,10 @@ class PageGeometry:
     extra: dict = field(default_factory=dict)
 
 
-def page_geometry(page) -> PageGeometry:
-    raw = page.extract_words(keep_blank_chars=False, use_text_flow=False)
+def page_geometry(page, y_tolerance: float = 3) -> PageGeometry:
+    """y_tolerance: how far apart (points) letters may sit and still be one word's line. Statements
+    that set 6-point text on 6-point lines need a smaller value, or neighbouring lines get mixed."""
+    raw = page.extract_words(keep_blank_chars=False, use_text_flow=False, y_tolerance=y_tolerance)
     words = [Word(w["text"], w["x0"], w["x1"], w["top"], w["bottom"]) for w in raw]
     h, v = [], []
     for e in page.edges:
@@ -161,7 +163,15 @@ def is_heading_line(text: str) -> bool:
 def find_table(geo: PageGeometry, extra_rules: list[tuple[str, str]] | None = None) -> Table | None:
     """Find the transaction table's heading row on this page and build its columns."""
     for i, line in enumerate(geo.lines):
-        if not is_heading_line(line.text):
+        # The heading may wrap over up to three lines ("Withdra" / "wal" / "(Dr)"), so the words that
+        # name the columns can be spread across them
+        wrapped = [line]
+        starts = not re.search(r"\d", line.text) and sum(bool(re.search(g, line.text.lower())) for g in HEADING_GROUPS) >= 2
+        for nxt in geo.lines[i + 1:i + 3] if starts else []:
+            if nxt.top - wrapped[-1].top > HEADER_SECOND_LINE or re.search(r"\d", nxt.text):
+                break
+            wrapped.append(nxt)
+        if not is_heading_line(" ".join(ln.text for ln in wrapped)):
             continue
         heading_lines = [line]
         for nxt in geo.lines[i + 1:i + 3]:

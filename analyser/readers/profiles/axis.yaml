@@ -3,8 +3,13 @@ name: Axis Bank
 detect:
   header: ['\bUTIB0\d{6}\b', 'Axis Bank']
 details:
-  # The holder's name is the first line of the statement, with no label
-  holder: '\A\s*(?P<h>[A-Z][A-Za-z .&]+?)\s*$'
+  # The holder's name is the first line of the statement, with no label (after an optional
+  # "Account Statement Report" title line)
+  holder: '\A\s*(?:Account Statement Report\s*\n\s*)?(?P<h>[A-Z][A-Za-z .&]+?)\s*$'
 totals:
   # Last page: "TRANSACTION TOTAL <debit> <credit>"
   pattern: 'TRANSACTION\s+TOTAL\s+(?P<debit>[\d,]+\.\d{2})\s+(?P<credit>[\d,]+\.\d{2})'
+reader:
+  columns:
+    '^debit credit$': drcr      # "Debit/Credit" heading beside an Amount column (CR / DR)
+  y_tolerance: 1                # 6-point text on 6-point lines: don't mix neighbouring lines

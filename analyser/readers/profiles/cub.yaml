@@ -1,0 +1,9 @@
+id: cub
+name: City Union Bank
+detect:
+  header: ['\bCIUB0\d{6}\b', 'CITY UNION BANK']
+details:
+  holder: 'CUSTOMER DETAILS\s*:\s*(?P<h>.+?)\s*$'
+totals:
+  # Last page: "TOTAL <debit> <credit> <closing balance>"
+  pattern: '(?m)^TOTAL\s+(?P<debit>[\d,]+\.\d+)\s+(?P<credit>[\d,]+\.\d+)'

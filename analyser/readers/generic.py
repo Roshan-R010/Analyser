@@ -23,8 +23,8 @@ from analyser.readers.parse import amount_side, parse_amount, parse_date
 OPENING_PATTERNS = re.compile(r"\b(b/?f|brought forward|opening balance|balance forward)\b", re.I)
 # In date-anchored mode, a line like this ends the table on that page
 STOP_PATTERNS = re.compile(
-    r"(generated on|page \d+ (of|/) \d+|computer generated|system.generated|"
-    r"^total\b|closing balance|denotes|statement summary|end of statement)", re.I)
+    r"(generated ?on|page ?\d+ ?(of|/) ?\d+|computer ?generated|system.generated|hdfc ?bank ?limited|"
+    r"^total\b|closing ?balance|denotes|statement ?summary|end of statement)", re.I)
 TOTALS_PATTERNS = [
     (re.compile(r"total\s*debits?\s*:?\s*(?:rs\.?|inr|₹)?\s*([\d,]+\.\d{2})", re.I), "debit"),
     (re.compile(r"total\s*credits?\s*:?\s*(?:rs\.?|inr|₹)?\s*([\d,]+\.\d{2})", re.I), "credit"),
@@ -32,7 +32,8 @@ TOTALS_PATTERNS = [
 # Balances the bank prints ("OPENING BALANCE 128541.23", "Closing Balance : 65,191.81 Cr")
 _AMT = r"(?:rs\.?|inr|₹)?\s*(-?[\d,]+\.\d{2})\s*(cr|dr)?\b"
 OPENING_PRINTED = re.compile(r"opening\s*balance\s*:?\s*" + _AMT, re.I)
-CLOSING_PRINTED = re.compile(r"closing\s*balance\s*:?\s*" + _AMT, re.I)
+# Not a heading row: its figure would be followed by more figures (IDFC's summary row)
+CLOSING_PRINTED = re.compile(r"closing\s*balance\s*:?\s*" + _AMT + r"(?!\s*-?[\d,]+\.\d{2})", re.I)
 # A bank's own list of returned cheques, printed after the transactions
 RETURNS_HEADING = re.compile(r"(cheque|chq)\s*return(ed)?\s*details|returned\s*cheques|"
                              r"dishono?u?red\s*(cheques|instruments)|cheque\s*returns", re.I)
@@ -52,6 +53,11 @@ class ReaderOptions:
     extra_columns: list[tuple[str, str]] = field(default_factory=list)  # (heading regex, field)
     # Bank-specific printed totals: a regex with named groups "debit" and "credit"
     totals_pattern: str = ""
+    # Letters closer than this (points) vertically are on one line; lower it for tightly set text
+    y_tolerance: float = 3
+    # Columns whose words are really part of the description (the description runs under a
+    # heading that sits to its right, e.g. BOB's "Cheque Number")
+    fold_into_description: tuple[str, ...] = ()
 
     @classmethod
     def from_profile(cls, raw: dict | None) -> "ReaderOptions":
@@ -59,7 +65,8 @@ class ReaderOptions:
         extra = [(pat, fld) for pat, fld in (cfg.get("columns") or {}).items()]
         totals = ((raw or {}).get("totals") or {}).get("pattern", "")
         return cls(description_join=cfg.get("description_join", " "), extra_columns=extra,
-                   totals_pattern=totals)
+                   totals_pattern=totals, y_tolerance=cfg.get("y_tolerance", 3),
+                   fold_into_description=tuple(cfg.get("fold_into_description") or ()))
 
 
 @dataclass
@@ -84,9 +91,12 @@ def read_statement(pdf, bank: str = "unknown", options: ReaderOptions | None = N
     table: Table | None = None
     rows: list[RawRow] = []
     for page_no, page in enumerate(pdf.pages, start=1):
-        geo = page_geometry(page)
+        geo = page_geometry(page, options.y_tolerance)
         found = find_table(geo, options.extra_columns)
         if found:
+            for c in found.columns:
+                if c.field in options.fold_into_description:
+                    c.field = "description"
             table = found
             start_y = found.header_bottom
         elif table is None:
@@ -234,7 +244,9 @@ def _add_row(st: Statement, row: RawRow, opt: ReaderOptions) -> None:
                 f"{where}: unreadable amount on {txn_date}: "
                 f"debit {_cell(row, 'debit')!r} credit {_cell(row, 'credit')!r}")
             return
-        debit, credit = abs(debit), abs(credit)
+        st.reversal_total += abs(min(debit, ZERO)) + abs(min(credit, ZERO))
+        # A negative amount is a reversal: it moves the balance the other way
+        debit, credit = (max(debit, ZERO) + max(-credit, ZERO), max(credit, ZERO) + max(-debit, ZERO))
 
     if debit == ZERO and credit == ZERO:
         if not st.transactions and balance is not None and OPENING_PATTERNS.search(description):
@@ -268,7 +280,8 @@ def _read_printed_totals(pdf, st: Statement, options: ReaderOptions) -> None:
     first = pdf.pages[0].extract_text() or ""
     # The totals can sit before a last page of notices: read the last few pages, end first
     tail_pages = [p.extract_text() or "" for p in pdf.pages[-3:]][::-1]
-    last = next((t for t in tail_pages if re.search(r"total|closing\s*balance", t, re.I)), tail_pages[0])
+    wanted = options.totals_pattern or r"total|closing\s*balance"
+    last = next((t for t in tail_pages if re.search(wanted, t, re.I)), tail_pages[0])
     if options.totals_pattern:
         m = re.search(options.totals_pattern, last, re.I) or re.search(options.totals_pattern, first, re.I)
         if m:
@@ -285,7 +298,7 @@ def _read_printed_totals(pdf, st: Statement, options: ReaderOptions) -> None:
     m = OPENING_PRINTED.search(first)
     if m:
         st.printed_opening = _money(m.group(1), m.group(2))
-    closings = list(CLOSING_PRINTED.finditer(last))
+    closings = next((c for c in (list(CLOSING_PRINTED.finditer(t)) for t in [last, *tail_pages]) if c), [])
     if closings:
         st.printed_closing = _money(closings[-1].group(1), closings[-1].group(2))
     st.printed_returns = read_returns_table("\n".join(tail_pages[::-1]))

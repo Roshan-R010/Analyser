@@ -17,7 +17,7 @@ import yaml  # noqa: E402
 
 from analyser.engine import load_statement  # noqa: E402
 from analyser.model import ZERO  # noqa: E402
-from conftest import EXPECTED, STATEMENTS, load_passwords  # noqa: E402
+from conftest import EXPECTED, STATEMENTS, find_statement, load_passwords  # noqa: E402
 
 
 def summarise(loaded) -> dict:
@@ -43,7 +43,7 @@ def main(names: list[str]) -> int:
     EXPECTED.mkdir(parents=True, exist_ok=True)
     failed = 0
     for name in names:
-        loaded = load_statement(STATEMENTS / name, passwords.get(name))
+        loaded = load_statement(find_statement(name) or STATEMENTS / name, passwords.get(name))
         if not loaded.supported:
             failed += 1
             c = loaded.check

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import EXPECTED, ROOT, STATEMENTS, load
+from conftest import EXPECTED, ROOT, STATEMENTS, library_pdfs, load
 
 sys.path.insert(0, str(ROOT / "tools"))
 from make_expected import summarise  # noqa: E402
@@ -21,10 +21,7 @@ CASES = sorted(EXPECTED.glob("*.yaml")) if EXPECTED.is_dir() else []
 
 
 def _pdf_for(expected: Path) -> Path | None:
-    for p in STATEMENTS.glob("*"):
-        if p.stem == expected.stem and p.suffix.lower() == ".pdf":
-            return p
-    return None
+    return next((p for p in library_pdfs() if p.stem == expected.stem), None)
 
 
 @pytest.mark.parametrize("expected", CASES, ids=[c.stem for c in CASES])
@@ -38,10 +35,18 @@ def test_statement_reads_as_expected(expected, passwords):
     assert summarise(loaded) == yaml.safe_load(expected.read_text(encoding="utf-8"))
 
 
+@pytest.mark.parametrize("pdf", library_pdfs(rejected=True), ids=lambda p: p.stem)
+def test_rejected_statement_stays_rejected(pdf, passwords):
+    """A statement whose own balances don't add up (bank error or an edited file) is never reported."""
+    loaded = load(pdf.name)
+    assert not loaded.check.ok and not loaded.supported
+
+
 def test_every_statement_has_expected_totals():
     """A statement dropped into the library without expected totals is a reminder, not silence."""
     if not STATEMENTS.is_dir():
         pytest.skip("no statement library")
-    missing = [p.name for p in STATEMENTS.glob("*") if p.suffix.lower() == ".pdf"
-               and not (EXPECTED / (p.stem + ".yaml")).is_file()]
+    missing = [p.name for p in library_pdfs() if not (EXPECTED / (p.stem + ".yaml")).is_file()]
+    names = [p.name.lower() for p in library_pdfs()]
+    assert len(names) == len(set(names)), "two statements share a file name (passwords and expected files go by name)"
     assert not missing, f"run tools/make_expected.py for: {missing}"

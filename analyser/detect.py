@@ -17,9 +17,9 @@ UNKNOWN = "unknown"
 # Words that appear in a transaction table's heading row, grouped by meaning
 _HEADING_GROUPS = [
     r"\bdate\b",
-    r"\bbalance\b",
-    r"\b(debit|withdrawal)s?\b",
-    r"\b(credit|deposit)s?\b",
+    r"balance\b",
+    r"\b(debit|withdrawal)",
+    r"\b(credit|deposit)",
     r"\b(particulars|narration|description|remarks)\b",
 ]
 HEADER_WEIGHT = 2
@@ -36,7 +36,15 @@ def header_text(page_text: str) -> str:
     """Text of the first page above the transaction table's heading row."""
     lines = page_text.splitlines()
     for i, line in enumerate(lines):
-        low = line.lower()
+        # a heading row can wrap over up to three lines (only a line without digits can start one)
+        wrapped = [line]
+        # and that line must already look like part of a heading (2+ column words)
+        starts = not re.search(r"\d", line) and sum(bool(re.search(g, line.lower())) for g in _HEADING_GROUPS) >= 2
+        for nxt in lines[i + 1:i + 3] if starts else []:
+            if re.search(r"\d", nxt):
+                break
+            wrapped.append(nxt)
+        low = " ".join(wrapped).lower()
         if sum(bool(re.search(g, low)) for g in _HEADING_GROUPS) >= 3:
             return "\n".join(lines[:i])
     return page_text  # no table heading found: use the whole page
