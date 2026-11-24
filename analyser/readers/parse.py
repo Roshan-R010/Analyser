@@ -57,7 +57,8 @@ def parse_amount(text: str) -> Decimal | None:
     """
     if text is None:
         return None
-    t = text.replace("₹", "").replace("INR", "").replace("Rs.", "").replace("Rs", "")
+    t = text.replace("−", "-").replace("–", "-")  # typographic minus / en dash
+    t = t.replace("₹", "").replace("INR", "").replace("Rs.", "").replace("Rs", "")
     t = re.sub(r"\s+", " ", t).strip()
     if t in ("", "-", "--", "—"):
         return Decimal("0.00")

@@ -21,7 +21,7 @@ from analyser.model import Transaction
 LENDERS_FILE = Path(__file__).resolve().parent.parent / "data" / "lenders.yaml"
 
 PRIVATE_FINANCE = re.compile(r"FINANCE|FINANC|FINANCIERS?|FINCORP|FINSERV|FINVEST|CREDITS?\b|LENDERS?|"
-                             r"\bFUNDS?\b|CAPITALS?\b|INVESTMENTS?\b|LEASING", re.I)
+                             r"\bFUNDS?\b|CAPITALS?\b|INVESTMENTS?\b|LEASING|MICROFIN|GRAMEEN|GRAMIN|\bKGFS\b", re.I)
 CHIT = re.compile(r"\bCHITS?\b|CHITTY|CHITFUND|\bKURI\b|\bNIDHI\b|BENEFIT\s*FUND", re.I)
 HAND_LOAN = re.compile(r"hand\s*loan|handloan|h/?loan\b|loan\s*return|loanreturn", re.I)
 GOLD_LOAN = re.compile(r"gold\s*loan|goldloan|\bjewel\s*loan|\bjl\s*(int|repay|cl)", re.I)

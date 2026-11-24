@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from analyser.fmt import inr
 from analyser.model import ZERO, Transaction
 from analyser.sections.loans import LenderLoan
 from analyser.sections.returns import FUNDS, TECHNICAL, ReturnsSection
@@ -18,27 +19,13 @@ class Flag:
     text: str
 
 
-def inr(x: Decimal) -> str:
-    """12,34,567 (whole rupees, Indian grouping)."""
-    neg = x < 0
-    s = str(abs(x).quantize(Decimal("1")))
-    head, tail = s[:-3], s[-3:]
-    parts = []
-    while len(head) > 2:
-        parts.insert(0, head[-2:])
-        head = head[:-2]
-    if head:
-        parts.insert(0, head)
-    out = ",".join(parts + [tail]) if parts else tail
-    return ("-" if neg else "") + out
-
-
 def _dates(ds: list[date]) -> str:
     return ", ".join(f"{d:%d %b}" for d in ds[:4]) + (f" +{len(ds) - 4} more" if len(ds) > 4 else "")
 
 
 def build_flags(transactions: list[Transaction], daily: dict[date, Decimal], returns: ReturnsSection,
-                loans: list[LenderLoan], notes: list[str]) -> list[Flag]:
+                loans: list[LenderLoan], notes: list[str], avg_balance: Decimal | None = None) -> list[Flag]:
+    """avg_balance: the average balance the report's summary shows, so the flags quote the same figure."""
     flags: list[Flag] = []
     credits = sum((t.credit for t in transactions), ZERO)
     debits = sum((t.debit for t in transactions), ZERO)
@@ -72,7 +59,7 @@ def build_flags(transactions: list[Transaction], daily: dict[date, Decimal], ret
         flags.append(Flag("high", f"Balance below zero on {len(neg_days)} day(s); lowest {inr(daily[low_day])} "
                                   f"on {low_day:%d %b %Y}"))
 
-    paying = [ln for ln in loans if ln.payments]
+    paying = [ln for ln in loans if ln.payments and ln.type != "Possible lender"]
     if paying:
         emi_total = sum((ln.emi for ln in paying if ln.emi), ZERO)
         flags.append(Flag("info", f"Paying {len(paying)} lender(s)"
@@ -89,7 +76,7 @@ def build_flags(transactions: list[Transaction], daily: dict[date, Decimal], ret
 
     if credits and debits:
         diff = abs(credits - debits) / credits
-        avg_bal = (sum(daily.values(), ZERO) / len(daily)) if daily else ZERO
+        avg_bal = avg_balance if avg_balance is not None else (sum(daily.values(), ZERO) / len(daily) if daily else ZERO)
         months = max(1, len({d.replace(day=1) for d in daily}))
         if diff <= Decimal("0.02") and avg_bal < credits / months * Decimal("0.05"):
             flags.append(Flag("watch", f"Money out almost equals money in ({inr(debits)} out of {inr(credits)} in) "

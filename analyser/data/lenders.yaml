@@ -172,3 +172,81 @@
 - name: Margadarsi Chit Fund
   type: Chit fund
   match: [MARGADARSI]
+- name: Dvara KGFS
+  type: Microfinance
+  match: [DVARAKGFS, DVARAHOLD, DVARAFIN]
+- name: Satin Creditcare
+  type: Microfinance
+  match: [SATINCREDIT]
+- name: Fusion Finance
+  type: Microfinance
+  match: [FUSIONMICRO, FUSIONFIN]
+- name: Arohan Financial
+  type: Microfinance
+  match: [AROHANFIN]
+- name: Annapurna Finance
+  type: Microfinance
+  match: [ANNAPURNAFIN]
+- name: Asirvad Microfinance
+  type: Microfinance
+  match: [ASIRVAD]
+- name: Muthoot Microfin
+  type: Microfinance
+  match: [MUTHOOTMICRO]
+- name: Belstar Microfinance
+  type: Microfinance
+  match: [BELSTAR]
+- name: Samasta Microfinance
+  type: Microfinance
+  match: [SAMASTA]
+- name: Navchetana Microfin
+  type: Microfinance
+  match: [NAVCHETANA]
+- name: Light Microfinance
+  type: Microfinance
+  match: [LIGHTMICRO]
+- name: Kissht (OnEMI)
+  type: Fintech
+  match: [KISSHT, ONEMI]
+- name: MoneyTap
+  type: Fintech
+  match: [MONEYTAP]
+- name: Faircent
+  type: Fintech
+  match: [FAIRCENT]
+- name: Aye Finance
+  type: NBFC
+  match: [AYEFINANCE]
+- name: Kinara Capital
+  type: NBFC
+  match: [KINARACAPITAL]
+- name: Vistaar Financial
+  type: NBFC
+  match: [VISTAARFIN]
+- name: Hinduja Leyland Finance
+  type: NBFC
+  match: [HINDUJALEYLAND]
+- name: Capri Global Capital
+  type: NBFC
+  match: [CAPRIGLOBAL]
+- name: Veritas Finance
+  type: NBFC
+  match: [VERITASFIN]
+- name: MAS Financial Services
+  type: NBFC
+  match: [MASFINANCIAL]
+- name: Home First Finance
+  type: Housing finance
+  match: [HOMEFIRSTFIN]
+- name: Aadhar Housing Finance
+  type: Housing finance
+  match: [AADHARHOUSING]
+- name: Can Fin Homes
+  type: Housing finance
+  match: [CANFINHOMES]
+- name: Repco Home Finance
+  type: Housing finance
+  match: [REPCOHOME]
+- name: India Shelter Finance
+  type: Housing finance
+  match: [INDIASHELTER]

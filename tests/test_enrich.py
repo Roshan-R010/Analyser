@@ -1,5 +1,5 @@
 """Enrichment rules on made-up descriptions shaped like real bank formats (no real data)."""
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal as D
 
 import pytest
@@ -10,7 +10,6 @@ from analyser.enrich.modes import classify
 from analyser.enrich.parties import _is_self, assign_parties, extract_name
 from analyser.model import Transaction
 from analyser.sections.modes import shares_to_100
-from analyser.sections.recurring import interval_label
 
 
 def T(desc, debit="0", credit="0", **kw):
@@ -132,13 +131,6 @@ def test_lenders():
 def test_percentages_always_total_100():
     assert sum(shares_to_100({"A": D("1"), "B": D("1"), "C": D("1")}).values()) == D("100.0")
     assert sum(shares_to_100({"A": D("44.64"), "B": D("15.93"), "C": D("39.43")}).values()) == D("100.0")
-
-
-def test_interval_labels():
-    d = date(2026, 1, 5)
-    assert interval_label([d + timedelta(days=30 * i) for i in range(5)]) == "Monthly"
-    assert interval_label([d + timedelta(days=14 * i) for i in range(5)]) == "Fortnightly"
-    assert interval_label([d + timedelta(days=i) for i in range(20)]).startswith("Frequent")
 
 
 @pytest.mark.parametrize("desc,name", [
@@ -313,3 +305,59 @@ def test_new_bank_modes():
     assert mode("BY ONL 0000IMPSFBL533516998980:IMMAM AHAM/SIRAJ MILK::00028") == "IMPS"
     assert mode("UPIOUT/551954241958/q341186444@ybl/UPI/5441") == "UPI"
     assert mode("INW_CLG :ClgInwPr: SABARI CORP ,ChqNo:12") == "Cheque"
+
+
+# ---- fixes from the library scan (names and modes that came out wrong)
+
+@pytest.mark.parametrize("desc,name", [
+    ("INW_CLG :ClgInwPr: SENTHILNATHAN K,ChqNo:123456, /BRANCH : SERVICE", "SENTHILNATHAN K"),  # no ",CHQNO" tail
+    ("UPI/186357449292/Payment from Ph/9791740335@ybl/INDIAN OVERSEAS/YBLcf88c36e", ""),  # sender's remark
+    ("TRANSFER TO 95568011646 TP ACH ADITYABIRFINLIDIB0000000013632138/BRANCH : SERVICE", ""),
+    ("FUND TRA", ""),
+])
+def test_names_that_are_really_remarks_or_plumbing(desc, name):
+    from analyser.enrich.parties import extract_name
+    assert extract_name(desc) == name
+
+
+def test_upi_remark_leaves_the_upi_id_as_the_party():
+    from analyser.enrich.parties import vpa_name
+    assert vpa_name("UPI/186357449292/Payment from Ph/9791740335@ybl/INDIAN OVERSEAS") == "9791740335"
+
+
+@pytest.mark.parametrize("desc,mode", [
+    ("36294257RUPAYMDRRCVRY-01/11/26", "Charges"), ("63950521TERMINAL1CARDSSETTL.01/11/26", "Card"),
+    ("SOUNDBOXRENTALNOV25GDU", "Charges"), ("EBANK:WIB/1489711610/Pongal Loan", "Transfer"),
+])
+def test_modes_for_hdfc_and_bob_wording(desc, mode):
+    from analyser.enrich.modes import classify
+    from analyser.model import Transaction
+    assert classify(Transaction(date=date(2026, 1, 1), description=desc, debit=D("1"))) == mode
+
+
+def test_microfinance_and_digital_lenders_are_found():
+    from analyser.enrich import modes as M
+    from analyser.enrich.lenders import identify
+    from analyser.model import Transaction
+
+    def lender(party, desc="UPI/P2M/1/x"):
+        t = Transaction(date=date(2026, 1, 1), description=desc, debit=D("8300"), mode=M.UPI,
+                        party_clean=party, party_key="K")
+        return identify(t)
+    assert lender("DVARA KGFS") == ("Dvara KGFS", "Microfinance")
+    assert lender("KISSHT") == ("Kissht (OnEMI)", "Fintech")
+    assert lender("SOME VILLAGE GRAMEEN SANGH")[1] == "Private finance"
+    assert lender("SRI RAMESH TRADERS") == ("", "")
+
+
+def test_bank_of_maharashtra_wording():
+    from analyser.enrich.modes import classify
+    from analyser.enrich.parties import extract_name
+    from analyser.model import Transaction
+
+    def mode(desc):
+        return classify(Transaction(date=date(2026, 1, 1), description=desc, debit=D("1")))
+    assert mode("GST") == "Charges" and mode("MC COMM.") == "Charges" and mode("IMPS CHG") == "Charges"
+    assert mode("508853XXXXXX9114 628617027315 00869383") == "Card"
+    # "UPI <ref>/<bank>/<NAME>/UPI": the name follows the bank code here
+    assert extract_name("UPI 627400349587/CNRB/INDUMATHY R/UPI") == "INDUMATHY R"

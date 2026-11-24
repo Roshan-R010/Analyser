@@ -1,7 +1,7 @@
 """Recurring debits: the same party paid again and again.
 
-A party is listed with at least 3 payments spread over at least 2 months (and
-Rs 10,000+ in total, unless it is a lender). Cash, own-account transfers, charges and
+A party is listed with at least 3 payments (and Rs 10,000+ in total, unless it is a lender), however
+short the statement: a week-long statement lists what repeated in that week. Cash, own-account transfers, charges and
 unknown entries are not "recurring payments".
 
 Inside each party, payments are grouped by amount (and by mandate, for auto-debits):
@@ -14,7 +14,6 @@ Inside each party, payments are grouped by amount (and by mandate, for auto-debi
 from __future__ import annotations
 
 import re
-import statistics
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
@@ -24,7 +23,6 @@ from analyser.model import ZERO, Transaction
 
 EXCLUDE = {"_CASH", "_SELF", "_CHARGES", "_INTEREST", "_RETURNS", "_UNKNOWN"}
 MIN_PAYMENTS = 3
-MIN_MONTHS = 2
 MIN_TOTAL = Decimal("10000")  # smaller repeat spends (fuel, food) only lengthen the report
 NEAR = Decimal("0.005")  # amounts within 0.5% of a repeated amount join it
 MAX_EXTRA_LINES = 2  # more one-offs than this are shown as one "Variable amounts" line
@@ -59,36 +57,9 @@ class RecurringRow:
     total: Decimal
     entries: int
     amounts: list[tuple[Decimal, int]]  # (amount, times), most common first
-    interval: str
     dates: list[date]
     lender: str
     lines: list[AmountLine] = field(default_factory=list)
-
-
-def interval_label(dates: list[date]) -> str:
-    gaps = [(b - a).days for a, b in zip(dates, dates[1:])]
-    if not gaps:
-        return "-"
-    months = len({d.replace(day=1) for d in dates})
-    per_month = len(dates) / months
-    if per_month >= 4:
-        return f"Frequent (~{per_month:.0f}/month)"
-    g = statistics.median(gaps)
-    spread = statistics.pstdev(gaps) if len(gaps) > 1 else 0
-    if g <= 2:
-        label = "Daily"
-    elif 5 <= g <= 9:
-        label = "Weekly"
-    elif 12 <= g <= 18:
-        label = "Fortnightly"
-    elif 25 <= g <= 35:
-        label = "Monthly"
-    elif 80 <= g <= 100:
-        label = "Quarterly"
-    else:
-        return "Irregular"
-    # Mostly irregular gaps around that median: say so
-    return label if spread <= max(4, g * 0.5) else "Irregular"
 
 
 def _ordinal(n: int) -> str:
@@ -190,17 +161,16 @@ def build_recurring(transactions: list[Transaction]) -> list[RecurringRow]:
     rows = []
     for key, tx in by.items():
         tx.sort(key=lambda t: t.date)
-        months = {t.date.replace(day=1) for t in tx}
         total = sum((t.debit for t in tx), ZERO)
         is_lender = any(t.lender for t in tx)
-        if len(tx) < MIN_PAYMENTS or len(months) < MIN_MONTHS or (total < MIN_TOTAL and not is_lender):
+        if len(tx) < MIN_PAYMENTS or (total < MIN_TOTAL and not is_lender):
             continue
         party = tx[0].party_clean
         rows.append(RecurringRow(
             party=party, key=key,
             description=Counter(t.description for t in tx).most_common(1)[0][0],
             total=total, entries=len(tx), amounts=Counter(t.debit for t in tx).most_common(),
-            interval=interval_label([t.date for t in tx]), dates=[t.date for t in tx],
+            dates=[t.date for t in tx],
             lender=next((t.lender for t in tx if t.lender), ""),
             lines=amount_lines(tx, party),
         ))

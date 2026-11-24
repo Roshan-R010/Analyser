@@ -1,0 +1,9 @@
+id: bom
+name: Bank of Maharashtra
+detect:
+  header: ['\bMAHB0\w{6}\b', 'Bank of Maharashtra']
+details:
+  holder: 'Account Holder Names\s+(?P<h>.+?)\s+Primary GSTIN'
+reader:
+  # "Cheque / Reference No": cheque numbers are short (1616), IMPS/UPI references are 12 digits
+  short_ref_is_cheque: true

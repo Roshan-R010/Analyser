@@ -1,5 +1,4 @@
 import copy
-from datetime import timedelta
 
 from analyser.combine import combine
 

@@ -39,7 +39,7 @@ def open_statement(path: str | Path, password: str | None = None) -> pdfplumber.
     try:
         pdf = pdfplumber.open(path, password=password or "")
         # pdfplumber opens lazily; touching the pages forces decryption now
-        pdf.pages
+        len(pdf.pages)
     except PdfminerException as exc:
         if _is_password_error(exc):
             if password:

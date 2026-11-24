@@ -11,11 +11,12 @@
 """
 from __future__ import annotations
 
+import bisect
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from rapidfuzz import fuzz
+from rapidfuzz import fuzz, process
 
 from analyser.enrich import modes as M
 from analyser.model import Transaction
@@ -37,13 +38,14 @@ CHANNEL_WORDS = {
     "DISBURSEMENT", "DISB", "P2M", "P2P", "TPFT", "PUR", "PAYMEN", "PAYME", "PAYM", "ACCOUNT", "REQUES",
     "IFT", "BRN", "INSTALLMENT", "INSTALMENT", "REMITTER", "TRANSFE",
     "UPIOUT", "IFO", "IFI", "IFN", "FRO", "NFT", "RTG", "INW", "OUTW", "OPM", "PMT", "MID", "SETDT",
-    "CHQPAID", "CTSS", "RKS", "NWD", "ATW", "CLGINWPR", "CHQNO", "TRANSAC", "UP", "PAYMENTF", "PAYMENTFRO", "PAYMENTFROM",
+    "CHQPAID", "CTSS", "RKS", "NWD", "ATW", "CLGINWPR", "CHQNO", "TRANSAC", "UP", "PAYMENTF", "PAYMENTFRO", "PAYMENTFROM", "TP", "EBANK", "WIB",
     "IBFUNDSTRANSFERCR", "IBFUNDSTRANSFERDR",
 }
 # The description itself says it went to the borrower's own account
 SELF_TEXT = re.compile(r"self\s*transf|own\s*a/?c\s*transf", re.I)
 # A piece that is only this (after cleaning) is not a party
 JUNK_NAMES = {"FUND", "FUNDS", "BANK", "TRANSFER", "PAYMENT"}
+JUNK_PREFIX = re.compile(r"^FUNDS?\s*TRA", re.I)  # "FUND TRA" is "FUND TRANSFER" cut short, not a lender
 # Bank names (squashed, upper case). A description piece that is a bank's name - often
 # truncated ("SOUTH INDI", "FEDERAL BA") - is the counterparty's bank, not the counterparty.
 BANK_NAMES = [
@@ -75,6 +77,7 @@ BANK_CODES = {
     "INDB", "DBSS", "DBS", "SIBL", "SIB", "KCU", "CAB", "IDFB", "AUBL", "ESFB", "UCBA", "UCO",
     "MAHB", "BOM", "PSIB", "JAKA", "KARB", "CSBK", "DLXB", "NTBL", "RATN", "TJSB", "COSB", "APGB", "SCBL",
     "HSBC", "DEUT", "AIRP", "PYTM", "FINO", "JIOP", "UJVN", "SURY", "UPIMI",
+    "YBL", "IBL", "APL", "OKAXIS", "OKSBI", "OKICICI", "OKHDFCBANK", "PTYBL", "PAYTM",  # UPI handle endings
 }
 # Clearing-house cities printed on cheque lines ("900001:CTS-CHENNAI-IN10"): never a party
 PLACES = {"CHENNAI", "MUMBAI", "DELHI", "NEW DELHI", "KOLKATA", "BANGALORE", "BENGALURU", "HYDERABAD",
@@ -82,6 +85,9 @@ PLACES = {"CHENNAI", "MUMBAI", "DELHI", "NEW DELHI", "KOLKATA", "BANGALORE", "BE
 # Bank codes some banks glue onto names ("ZEN INDUSTICIC" = "ZEN INDUST" + ICIC)
 GLUED_BANK = re.compile(r"(?<=[A-Za-z]{4})(ICIC|HDFC|SBIN|IOBA|KVBL|UTIB)$", re.I)
 REMARK_AFTER_MASK = re.compile(r"x{3,}\d+", re.I)  # IMPS: anything after a masked account is a remark
+CHQNO_TAIL = re.compile(r"\s*,?\s*chq\s*no\b.*$", re.I)  # "NAME ,ChqNo:123,"
+PAYMENT_FROM = re.compile(r"^payment\s*from\b", re.I)  # "Payment from Ph" is the sender's remark
+CARD_SETTLEMENT = re.compile(r"card\s*pmt|cards?\s*settl", re.I)  # a card machine's payout to the borrower
 BRANCH_TAIL = re.compile(r"/?\s*BRANCH\s*:", re.I)  # "/BRANCH : ATM SERVICE BRANCH"
 IFSC = re.compile(r"^[A-Z]{4}0[A-Z0-9]{6}$", re.I)
 VPA = re.compile(r"[^\s/|]*@[^\s/|]*")  # a UPI id never contains "/"
@@ -132,6 +138,8 @@ def _is_code(word: str, allow_bank: bool = False) -> bool:
 
 
 def _clean_piece(piece: str, allow_bank: bool = False) -> str:
+    if PAYMENT_FROM.match(piece.strip()):
+        return ""
     words = []
     for w in piece.split():
         m = VPA_LOST_AT.match(w)
@@ -143,7 +151,9 @@ def _clean_piece(piece: str, allow_bank: bool = False) -> str:
     name = " ".join(words)
     name = re.sub(r"\(.*$", "", name)  # "Epimoney(R" -> "Epimoney"
     name = re.sub(r"\s+", " ", name).strip(" .-&,*")
-    return "" if name.upper() in PLACES or name.upper() in JUNK_NAMES else name
+    if name.upper() in PLACES or name.upper() in JUNK_NAMES or JUNK_PREFIX.match(name):
+        return ""
+    return name
 
 
 def extract_name(description: str, allow_bank: bool = False) -> str:
@@ -154,9 +164,12 @@ def extract_name(description: str, allow_bank: bool = False) -> str:
     text = description or ""
     text = REMARK_AFTER_MASK.split(text)[0]  # drop the free-text remark after a masked account
     text = BRANCH_TAIL.split(text)[0]  # the bank's own branch is never the party
+    text = CHQNO_TAIL.sub("", text)
     text = VPA.sub(" / ", text)
     pieces = re.split(r"[/:|\\]+|-+|_|\s{2,}", text)
-    for piece in _before_bank_code(pieces):
+    if text.lstrip().upper().startswith("TRANSFER"):  # Indian Bank: "TRANSFER TO <acct> <acct>/SBIN/<remark>"
+        pieces = list(_before_bank_code(pieces))
+    for piece in pieces:
         if not allow_bank and is_bank_piece(piece):
             continue
         name = _clean_piece(piece, allow_bank)
@@ -264,7 +277,7 @@ def assign_parties(transactions: list[Transaction], holders: list[str],
         elif t.mode == M.RETURN:
             special = RETURNS
         else:
-            if t.mode == M.CARD and re.search(r"card\s*pmt", t.description or "", re.I):
+            if t.mode == M.CARD and CARD_SETTLEMENT.search(t.description or ""):
                 raw = "CARD SETTLEMENT"  # a card machine's payout to the borrower, not a person
             else:
                 raw = extract_name(t.description, allow_bank=(t.mode == M.ECS))
@@ -293,6 +306,7 @@ def assign_parties(transactions: list[Transaction], holders: list[str],
 
 PREFIX_MERGE_MIN = 8  # a truncated name must keep at least this many letters to be merged
 SIMILAR = 85
+SIMILAR_MIN_LEN = 5  # shorter names are never compared
 
 
 def _group(transactions: list[Transaction]) -> PartyIndex:
@@ -301,14 +315,14 @@ def _group(transactions: list[Transaction]) -> PartyIndex:
         if not t.party_key.startswith("_"):
             variants[t.party_key][t.party_raw] += 1
 
-    # Truncated names join the longer name they are a prefix of (only if unambiguous)
-    keys = sorted(variants, key=len, reverse=True)
+    # Truncated names join the longer name they are a prefix of (only if unambiguous). Longest
+    # first; the names starting with k sit together in sorted order, so no pass over all names.
+    alphabetical = sorted(variants)
     parent: dict[str, str] = {}
-    for k in keys:
+    for k in sorted(variants, key=len, reverse=True):
         if len(k) < PREFIX_MERGE_MIN:
             continue
-        longer = [o for o in keys if len(o) > len(k) and o.startswith(k) and o not in parent]
-        roots = {parent.get(o, o) for o in longer}
+        roots = {parent.get(o, o) for o in _starting_with(alphabetical, k) if o not in parent}
         if len(roots) == 1:
             parent[k] = roots.pop()
 
@@ -331,18 +345,34 @@ def _group(transactions: list[Transaction]) -> PartyIndex:
 
     # Look-alikes are only flagged, never merged. Every spelling is compared, so
     # "KALAJFINANCE" is caught against "KALAIFINANCE" even if that group shows a longer name.
-    spellings = [(name_key(v), g.key) for g in groups.values() for v in g.variants]
+    spelled_in: dict[str, set[str]] = defaultdict(set)  # spelling key -> the groups using it
+    for g in groups.values():
+        for v in g.variants:
+            if len(name_key(v)) >= SIMILAR_MIN_LEN:
+                spelled_in[name_key(v)].add(g.key)
+    spellings = sorted(spelled_in)
     best: dict[tuple[str, str], int] = {}
-    for i, (a, ga) in enumerate(spellings):
-        for b, gb in spellings[i + 1:]:
-            if ga == gb or min(len(a), len(b)) < 5:
-                continue
-            score = int(fuzz.ratio(a, b))
-            short, long_ = sorted((a, b), key=len)
-            if len(short) >= 4 and long_.startswith(short):
-                score = max(score, 95)  # "ABCD" / "ABCD TRADERS": too short to merge, worth a look
-            pair = tuple(sorted((ga, gb)))
-            if score >= SIMILAR and score > best.get(pair, 0):
-                best[pair] = score
+
+    def note(a: str, b: str, score: int) -> None:
+        for ga in spelled_in[a]:
+            for gb in spelled_in[b]:
+                pair = (ga, gb) if ga < gb else (gb, ga)
+                if ga != gb and score > best.get(pair, 0):
+                    best[pair] = score
+
+    for a in spellings:
+        for b, score, _ in process.extract(a, spellings, scorer=fuzz.ratio, score_cutoff=SIMILAR, limit=None):
+            if b > a:
+                note(a, b, int(score))
+        for b in _starting_with(spellings, a):  # "ABCDE" / "ABCDE TRADERS": too short to merge, worth a look
+            note(a, b, 95)
     possibly = sorted(((a, b, s) for (a, b), s in best.items()), key=lambda x: -x[2])
     return PartyIndex(groups=groups, possibly_same=possibly)
+
+
+def _starting_with(sorted_keys: list[str], prefix: str):
+    """The longer keys that start with `prefix`, from an alphabetically sorted list."""
+    i = bisect.bisect_right(sorted_keys, prefix)
+    while i < len(sorted_keys) and sorted_keys[i].startswith(prefix):
+        yield sorted_keys[i]
+        i += 1

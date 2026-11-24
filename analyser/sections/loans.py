@@ -11,6 +11,9 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 
+from rapidfuzz import fuzz
+
+from analyser.fmt import inr
 from analyser.model import ZERO, Transaction
 from analyser.sections.returns import ReturnsSection
 
@@ -60,11 +63,47 @@ def usual_emi(pays: list[Transaction]) -> Decimal | None:
     return sorted(monthly.values())[len(monthly) // 2]  # median month
 
 
+POSSIBLE = "Possible lender"  # named like a lender ("... FINANCE") but nothing else says so
+SAME_LENDER_SIMILARITY = 90  # name similarity (%) needed before two lender spellings are even considered
+
+
+def _merge_spellings(by: dict[str, list[Transaction]]) -> dict[str, list[str]]:
+    """Join lender names that are one lender spelled two ways in the bank's own text ("ARASAN FINANCE" /
+    "ABASAN FINANCE": a clearing house typing a cheque's payee). Merged only on evidence: nearly the same
+    name, the same kind of lender, and every amount of the rarer spelling is an amount the other one is
+    also paid. Returns {kept name: [names merged into it]}; the entries' lender is renamed in place."""
+    merged: dict[str, list[str]] = {}
+    for small in sorted(by, key=lambda n: len(by[n])):
+        if small not in by or _MANDATE.match(small) or small.startswith("Auto-debit"):
+            continue
+        amounts = {t.debit or t.credit for t in by[small]}
+        for big in sorted(by, key=lambda n: -len(by[n])):
+            if big == small or len(by[big]) < len(by[small]) or _MANDATE.match(big):
+                continue
+            if by[big][0].lender_type != by[small][0].lender_type:
+                continue
+            if fuzz.ratio(_squash(small), _squash(big)) < SAME_LENDER_SIMILARITY:
+                continue
+            if not amounts <= {t.debit or t.credit for t in by[big]}:
+                continue
+            for t in by[small]:
+                t.lender = big
+            by[big].extend(by.pop(small))
+            merged.setdefault(big, []).append(small)
+            break
+    return merged
+
+
+def _squash(name: str) -> str:
+    return re.sub(r"[^A-Z0-9]", "", name.upper())
+
+
 def build_loans(transactions: list[Transaction], returns: ReturnsSection) -> list[LenderLoan]:
     by: dict[str, list[Transaction]] = {}
     for t in transactions:
         if t.lender:
             by.setdefault(t.lender, []).append(t)
+    merged = _merge_spellings(by)
 
     bounced_originals = {id(b.original) for b in returns.bounces if b.original is not None}
     loans = []
@@ -84,12 +123,17 @@ def build_loans(transactions: list[Transaction], returns: ReturnsSection) -> lis
                 if len(in_month) >= 2 and all(a < emi for a in in_month):
                     split.append(m)
 
+        lender_type = entries[0].lender_type
+        if lender_type == "Private finance" and len(entries) == 1:
+            lender_type = POSSIBLE  # only a name that sounds like a lender, seen once: not counted as a lender
+
         loan = LenderLoan(
-            lender=lender, type=entries[0].lender_type, entries=entries, emi=emi,
+            lender=lender, type=lender_type, entries=entries, emi=emi,
             paid_total=sum((t.debit for t in pays), ZERO),
             received_total=sum((t.credit for t in gets), ZERO),
             payments=len(pays), months_paid=paid_months, months_missed=missed, months_split=split,
             bounces=sum(1 for t in entries if id(t) in bounced_originals),
+            notes=[f"also spelled \"{_title(o)}\" in the bank's text" for o in merged.get(lender, [])],
         )
         loans.append(loan)
     loans.sort(key=lambda x: (-(x.paid_total + x.received_total), x.lender))
@@ -189,15 +233,11 @@ def loan_blocks(loans: list[LenderLoan]) -> list[LoanBlock]:
             bits.append("ACH installment")
         elif bank_loan:
             bits.append("EMI installment")
+        bits.extend(ln.notes)
         if ln.months_missed:
             bits.append("no payment in " + _and([f"{x:%b %Y}" for x in ln.months_missed]))
         if ln.received_total:
-            bits.append(f"₹{_inr(ln.received_total)} received from this lender")
+            bits.append(f"₹{inr(ln.received_total)} received from this lender")
         blocks.append(LoanBlock(title=title, subline=" · ".join(bits) if n else " · ".join(bits[1:] or bits),
                                 paid=ln.paid_total, received=ln.received_total, rows=rows))
     return blocks
-
-
-def _inr(x: Decimal) -> str:
-    from analyser.sections.flags import inr
-    return inr(x)

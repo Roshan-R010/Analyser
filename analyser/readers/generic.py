@@ -58,6 +58,9 @@ class ReaderOptions:
     # Columns whose words are really part of the description (the description runs under a
     # heading that sits to its right, e.g. BOB's "Cheque Number")
     fold_into_description: tuple[str, ...] = ()
+    # The bank's "Cheque / Reference No" column holds both: a short number (3-8 digits) is a cheque
+    # number, a long one (an IMPS / UPI reference) stays a reference
+    short_ref_is_cheque: bool = False
 
     @classmethod
     def from_profile(cls, raw: dict | None) -> "ReaderOptions":
@@ -66,7 +69,8 @@ class ReaderOptions:
         totals = ((raw or {}).get("totals") or {}).get("pattern", "")
         return cls(description_join=cfg.get("description_join", " "), extra_columns=extra,
                    totals_pattern=totals, y_tolerance=cfg.get("y_tolerance", 3),
-                   fold_into_description=tuple(cfg.get("fold_into_description") or ()))
+                   fold_into_description=tuple(cfg.get("fold_into_description") or ()),
+                   short_ref_is_cheque=bool(cfg.get("short_ref_is_cheque", False)))
 
 
 @dataclass
@@ -85,13 +89,14 @@ class RawRow:
 
 
 def read_statement(pdf, bank: str = "unknown", options: ReaderOptions | None = None,
-                   statement_no: int = 0) -> Statement:
+                   statement_no: int = 0, geometries: list[PageGeometry] | None = None) -> Statement:
+    """geometries: the pages' layouts if already read (see parallel.py); otherwise read here."""
     options = options or ReaderOptions()
     st = Statement(bank=bank, page_count=len(pdf.pages), statement_no=statement_no)
     table: Table | None = None
     rows: list[RawRow] = []
     for page_no, page in enumerate(pdf.pages, start=1):
-        geo = page_geometry(page, options.y_tolerance)
+        geo = geometries[page_no - 1] if geometries else page_geometry(page, options.y_tolerance)
         found = find_table(geo, options.extra_columns)
         if found:
             for c in found.columns:
@@ -254,12 +259,16 @@ def _add_row(st: Statement, row: RawRow, opt: ReaderOptions) -> None:
             return
         st.warnings.append(f"{where}: row with no amount on {txn_date}: {description[:60]!r}")
 
+    ref_no, cheque_no = _cell(row, "ref_no", ""), _cell(row, "cheque_no", "")
+    if opt.short_ref_is_cheque and not cheque_no and re.fullmatch(r"\d{3,8}", ref_no):
+        ref_no, cheque_no = "", ref_no
+
     st.transactions.append(Transaction(
         date=txn_date,
         value_date=_date(row, "value_date"),
         description=description,
-        ref_no=_cell(row, "ref_no", ""),
-        cheque_no=_cell(row, "cheque_no", ""),
+        ref_no=ref_no,
+        cheque_no=cheque_no,
         code=_cell(row, "code", ""),
         debit=debit,
         credit=credit,

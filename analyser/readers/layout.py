@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 LINE_TOLERANCE = 2.0  # words whose tops differ by less than this are on one line
 COLUMN_GAP = 6.0  # a horizontal gap wider than this separates heading columns
+STRAY_GAP = 25.0  # a heading word this far from every main-line heading starts a column of its own
 HEADER_SECOND_LINE = 14.0  # max distance to a wrapped second heading line
 
 # Heading text -> field. Checked in order; the first match wins.
@@ -179,25 +180,49 @@ def find_table(geo: PageGeometry, extra_rules: list[tuple[str, str]] | None = No
             if gap > HEADER_SECOND_LINE or re.search(r"\d", nxt.text):
                 break
             heading_lines.append(nxt)
-        table = _build_columns(geo, heading_lines, extra_rules)
+        # A short line just above the heading can belong to it ("Cheque" over "/Reference No")
+        above = geo.lines[i - 1] if i > 0 else None
+        if above and not (line.top - above.top <= HEADER_SECOND_LINE and not re.search(r"\d", above.text)
+                          and len(above.words) <= 3):
+            above = None
+        table = _build_columns(geo, heading_lines, extra_rules, above)
         if table:
             return table
     return None
 
 
+def _stray_heading_groups(words: list[Word], groups: list[list[Word]]) -> list[list[Word]]:
+    """Heading words on the lines above/below the main heading line that sit well away from every main-line
+    heading: they name a column the main line leaves blank (BOM: "Cheque" / "/Reference No"). Words that
+    touch each other horizontally form one heading."""
+    stray = sorted((w for w in words
+                    if all(w.x0 > g[-1].x1 + STRAY_GAP or w.x1 < g[0].x0 - STRAY_GAP for g in groups)),
+                   key=lambda w: w.x0)
+    clusters: list[list[Word]] = []
+    for w in stray:
+        if clusters and w.x0 <= max(x.x1 for x in clusters[-1]) + COLUMN_GAP:
+            clusters[-1].append(w)
+        else:
+            clusters.append([w])
+    return clusters
+
+
 def _build_columns(geo: PageGeometry, heading_lines: list[Line],
-                   extra_rules: list[tuple[str, str]] | None) -> Table | None:
+                   extra_rules: list[tuple[str, str]] | None, above: Line | None = None) -> Table | None:
     first = heading_lines[0]
-    top, bottom = first.top, heading_lines[-1].bottom
+    bottom = heading_lines[-1].bottom
 
     # Column bands: from vertical ruled lines crossing the heading, if there are enough
     xs = sorted({x for x, t, b in geo.v_rules if t <= first.bottom and b >= first.top})
     xs = _dedupe(xs, tol=2.0)
     groups: list[list[Word]] = []
     bands: list[tuple[float, float]] = []
+    extra_words = (above.words if above else []) + [w for ln in heading_lines[1:] for w in ln.words]
     if len(xs) >= 4:
         for a, b in zip(xs, xs[1:]):
             ws = [w for w in first.words if a <= w.xc < b]
+            if not ws:  # a ruled column whose heading sits on the line above or below ("Cheque" / "/Reference No")
+                ws = [w for w in extra_words if a <= w.xc < b]
             if ws:
                 groups.append(ws)
                 bands.append((a, b))
@@ -207,16 +232,22 @@ def _build_columns(geo: PageGeometry, heading_lines: list[Line],
                 groups[-1].append(w)
             else:
                 groups.append([w])
+        strays = _stray_heading_groups(extra_words, groups)
+        if strays:
+            groups = sorted(groups + strays, key=lambda g: min(w.x0 for w in g))
         # Boundaries halfway between neighbouring headings
         for k, g in enumerate(groups):
             left = 0.0 if k == 0 else (groups[k - 1][-1].x1 + g[0].x0) / 2
             right = geo.width if k == len(groups) - 1 else (g[-1].x1 + groups[k + 1][0].x0) / 2
             bands.append((left, right))
 
-    names = [" ".join(w.text for w in g) for g in groups]
+    in_stray = {id(w) for g in groups for w in g if w not in first.words}
+    names = [" ".join(w.text for w in sorted(g, key=lambda w: (round(w.top), w.x0))) for g in groups]
     # Wrapped heading words (e.g. "Withdrawal" / "(Dr)") join the column above them
     for ln in heading_lines[1:]:
         for w in ln.words:
+            if id(w) in in_stray:
+                continue
             for k, (a, b) in enumerate(bands):
                 if a <= w.xc < b:
                     names[k] += " " + w.text

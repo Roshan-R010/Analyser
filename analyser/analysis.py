@@ -7,14 +7,12 @@ modes -> flags -> cross-checks.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
-from decimal import Decimal
 
 from analyser.combine import Account, combine
 from analyser.enrich import enrich
 from analyser.enrich.parties import PartyIndex
 from analyser.model import Statement, Transaction
-from analyser.sections.cashflow import CashflowSection, build_cashflow, daily_balances
+from analyser.sections.cashflow import CashflowSection, build_cashflow, total_daily_balances
 from analyser.sections.checks import Check, build_checks
 from analyser.sections.cheques import build_cheque_list
 from analyser.sections.flags import Flag, build_flags
@@ -35,7 +33,6 @@ class Report:
     parties: PartyIndex
     returns: ReturnsSection
     cashflow: CashflowSection
-    daily_total: dict[date, Decimal]
     month_parties: list[MonthParties]
     unknown: UnknownSection
     loans: list[LenderLoan]
@@ -74,20 +71,17 @@ def analyse(loaded: list) -> Report:
 
     printed = [p for ls in loaded for p in ls.statement.printed_returns]
     returns = build_returns(tx, printed)
-    cashflow = build_cashflow(accounts, returns.count_by_month())
-    daily: dict[date, Decimal] = {}
-    for acc in accounts:
-        for d, b in daily_balances(acc).items():
-            daily[d] = daily.get(d, Decimal(0)) + b
+    daily = total_daily_balances(accounts)
+    cashflow = build_cashflow(accounts, returns.count_by_month(), daily)
 
     report = Report(
         statements=loaded, accounts=accounts, account_checks=account_checks, transactions=tx,
-        parties=parties, returns=returns, cashflow=cashflow, daily_total=daily,
+        parties=parties, returns=returns, cashflow=cashflow,
         month_parties=build_month_parties(tx), unknown=build_unknown(tx),
         loans=build_loans(tx, returns), recurring=build_recurring(tx), cheques=build_cheque_list(tx),
         modes_in=build_mode_split(tx, credit=True), modes_out=build_mode_split(tx, credit=False),
     )
     notes = [n for acc in accounts for n in acc.notes]
-    report.flags = build_flags(tx, daily, returns, report.loans, notes)
+    report.flags = build_flags(tx, daily, returns, report.loans, notes, cashflow.total.avg_balance)
     report.checks = build_checks(report)
     return report

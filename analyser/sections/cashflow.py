@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
 from analyser.combine import Account
 from analyser.model import ZERO
@@ -35,7 +35,7 @@ class CashflowSection:
     months: list[CashflowRow]
     total: CashflowRow
     monthly_avg: CashflowRow
-    last: dict[int, CashflowRow | None]  # 3/6/9/12 -> row, or None when not enough months
+    last: dict[int, CashflowRow | None]  # 3/6/9/12 -> the last n months (all months if fewer); None only when empty
 
 
 def _month(d: date) -> date:
@@ -68,13 +68,20 @@ def daily_balances(acc: Account) -> dict[date, Decimal]:
     return out
 
 
-def build_cashflow(accounts: list[Account], returns_by_month: dict[date, int] | None = None) -> CashflowSection:
-    returns_by_month = returns_by_month or {}
-    # Sum of all accounts' balances for each day any account covers
-    day_total: dict[date, Decimal] = {}
+def total_daily_balances(accounts: list[Account]) -> dict[date, Decimal]:
+    """Sum of all accounts' closing balances for each day any account covers."""
+    total: dict[date, Decimal] = {}
     for acc in accounts:
         for d, b in daily_balances(acc).items():
-            day_total[d] = day_total.get(d, ZERO) + b
+            total[d] = total.get(d, ZERO) + b
+    return total
+
+
+def build_cashflow(accounts: list[Account], returns_by_month: dict[date, int] | None = None,
+                   day_total: dict[date, Decimal] | None = None) -> CashflowSection:
+    returns_by_month = returns_by_month or {}
+    if day_total is None:
+        day_total = total_daily_balances(accounts)
 
     tx = [t for acc in accounts for t in acc.transactions]
     if not tx and not day_total:
@@ -84,10 +91,16 @@ def build_cashflow(accounts: list[Account], returns_by_month: dict[date, int] | 
     first = _month(min(list(day_total) + [t.date for t in tx]))
     last = _month(max(list(day_total) + [t.date for t in tx]))
     rows: list[CashflowRow] = []
+    tx_by_month: dict[date, list] = {}
+    for t in tx:
+        tx_by_month.setdefault(_month(t.date), []).append(t)
+    balances_by_month: dict[date, list[Decimal]] = {}
+    for d, b in day_total.items():
+        balances_by_month.setdefault(_month(d), []).append(b)
     m = first
     while m <= last:
-        mt = [t for t in tx if _month(t.date) == m]
-        days = [b for d, b in day_total.items() if _month(d) == m]
+        mt = tx_by_month.get(m, [])
+        days = balances_by_month.get(m, [])
         rows.append(CashflowRow(
             label=f"{m:%b %Y}",
             credit=sum((t.credit for t in mt), ZERO),
@@ -104,11 +117,8 @@ def build_cashflow(accounts: list[Account], returns_by_month: dict[date, int] | 
     avg = _summary(f"Monthly Avg. ({rows[0].label} - {rows[-1].label})", rows, average=True)
     last_n = {}
     for n in (3, 6, 9, 12):
-        if len(rows) < n:
-            last_n[n] = None
-        else:
-            part = rows[-n:]
-            last_n[n] = _summary(f"Last {n} months ({part[0].label} to {part[-1].label})", part, average=False)
+        part = rows[-n:]  # a shorter statement has fewer months: show all of them, never an empty row
+        last_n[n] = _summary(f"Last {n} months ({part[0].label} to {part[-1].label})", part, average=False)
     return CashflowSection(months=rows, total=total, monthly_avg=avg, last=last_n)
 
 
@@ -124,7 +134,3 @@ def _summary(label: str, rows: list[CashflowRow], average: bool) -> CashflowRow:
     return CashflowRow(label=label, credit=credit, debit=debit, avg_balance=avg_bal,
                        cr_entries=cr, dr_entries=dr, returns=None)
 
-
-def rupees(x: Decimal) -> Decimal:
-    """Round to whole rupees for display (half up)."""
-    return x.quantize(Decimal("1"), rounding=ROUND_HALF_UP)

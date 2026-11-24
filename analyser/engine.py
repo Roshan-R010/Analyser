@@ -16,6 +16,7 @@ from analyser.details import read_details
 from analyser.model import Statement
 from analyser.profiles import load_profiles
 from analyser.readers.generic import ReaderOptions, read_statement
+from analyser.readers.parallel import page_geometries
 from analyser.unlock import open_statement
 from analyser.verify import VerifyResult, verify
 
@@ -51,7 +52,9 @@ def load_statement(path: str | Path, password: str | None = None, statement_no: 
     with open_statement(path, password) as pdf:
         bank = detect_bank(pdf).bank
         raw = profiles[bank].raw if bank != UNKNOWN else None
-        st = read_statement(pdf, bank, ReaderOptions.from_profile(raw), statement_no=statement_no)
+        options = ReaderOptions.from_profile(raw)
+        geometries = page_geometries(path, password, len(pdf.pages), options.y_tolerance)
+        st = read_statement(pdf, bank, options, statement_no=statement_no, geometries=geometries)
         details = read_details(header_text(pdf.pages[0].extract_text() or ""), raw)
         picture = _page_png(pdf.pages[0]) if with_picture else b""
     st.account_holder = details.holder

@@ -17,10 +17,6 @@ CASH, CHEQUE, ECS = "Cash", "Cheque", "ECS/NACH"
 TRANSFER, BILLPAY, CARD = "Transfer", "Bill pay", "Card"
 CHARGES, INTEREST, RETURN, OTHER = "Charges", "Interest", "Return", "Other"
 
-ALL_MODES = [NEFT, RTGS, IMPS, UPI, CASH, CHEQUE, ECS, TRANSFER, BILLPAY, CARD,
-             CHARGES, INTEREST, RETURN, OTHER]
-
-
 def _r(pattern: str) -> re.Pattern:
     return re.compile(pattern, re.I)
 
@@ -30,7 +26,7 @@ RULES: list[tuple[str, re.Pattern]] = [
     (CHARGES, _r(r"\bchgs?\b|\bchrgs?\b|\bcharges?\b|\+\s*gst|incl\.?\s*gst|\bgst\s*on\b|\bcommission\b"
                  r"|\bsms\s*(alert|chg)|\bamc\b|\bpenal|min(imum)?\.?\s*bal|non[- ]?maint|\bsc\s*:"
                  r"|service\s*charge|\b[cs]gst\b|\bigst\b|chg[a-z]{3}-|\bprocessing\s*fee|\bannual\s*fee"
-                 r"|returncharges|postxnmarkup|^mincrreqd|^tds\b")),
+                 r"|returncharges|postxnmarkup|^mincrreqd|^tds\b|^gst$|^mc comm\b|mdr(rcvry)?\b|\b(edc|soundbox)\s*rental")),
     # Money sent back: cheque returns, rejected clearing, NEFT/RTGS/IMPS/ECS returns, reversals
     (RETURN, _r(r"\b(rtgs|neft|imps|ecs|nach|ach)[\s\-/]*(rtn|return|rej)"
                 r"|\b(chq|cheque)\s*(rtn|return)|\breturned\s*:|\(rej\)|\bclg\s*\(?ret"
@@ -52,14 +48,14 @@ RULES: list[tuple[str, re.Pattern]] = [
     # Cash: branch deposits/withdrawals, ATM, self cheques
     (CASH, _r(r"\bcash\b|cashdep|cashwdl|cash\s*(dep|wdl|withdrawal|deposit)|\bcsh\b|\batm\b|\bnfs/"
               r"|\bcwdl\b|\bcsw\b|chq\s*paid[\s\-]*self|self\s*-\s*chq|^\s*your\s*self\s*$|^\s*self\s*$|^(nwd|atw)-")),
-    (CARD, _r(r"\bpos\b|pos[\-/_]|^pos\d|^mps/|\bvps/|\bips/|debit\s*card|\becom\b|\bpcd/|card\s*pmt")),
+    (CARD, _r(r"\bpos\b|pos[\-/_]|^pos\d|^mps/|\bvps/|\bips/|debit\s*card|\becom\b|\bpcd/|card\s*pmt|cards?\s*settl|^\d{6}x{4,}\d{4}\b")),
     (BILLPAY, _r(r"^bil/|\bbbps\b|\bbpay\b|bill\s*pay")),
     (CHEQUE, _r(r"\bclg\b|clg[:/]|_clg\b|^chqpaid|clearing|\bchq\b|\bcheque\b|\bcts\b|\bi/w\b|\bo/w\b|inward\s*clg")),
 ]
 
 # Transfers within the bank (own or third party). Checked after the bank's code column.
 TRANSFER_RULE = _r(r"^inf/|\binft\b|\bft\s*-|\bfund\s*transfer|\bt(r)?fr?\b|\btpt\b"
-                   r"|^ift/|^transfer\s+(to|from)\b|fundstransfer|mb-(quick_)?within|within-dr|\bsb\s*trf|^by\s+sb\b|\bib\s*fund|\bdisbursement\b"
+                   r"|^ebank:|^ift/|^transfer\s+(to|from)\b|fundstransfer|mb-(quick_)?within|within-dr|\bsb\s*trf|^by\s+sb\b|\bib\s*fund|\bdisbursement\b"
                    r"|^cms/|^to\s+[a-z]|^mob/|\btpft\b|^inb/ift\b")
 
 # Bank code column values (e.g. IOB "COD") that settle the mode when nothing else does

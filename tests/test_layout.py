@@ -94,3 +94,27 @@ def test_printed_cheque_return_table():
         ("100001", "62500.00", 12, True), ("200002", "1500.50", 14, False)]
     assert rows[0].reason == "Funds insufficient"
     assert read_returns_table("no such table here") == []
+
+
+def _w(text, x0, x1, top):
+    return Word(text, x0, x1, top, top + 8)
+
+
+def _geometry(v_rules=()):
+    from analyser.readers.layout import PageGeometry, group_lines
+    main = [_w("Sr", 14, 26, 100), _w("Date", 62, 77, 100), _w("Particulars", 163, 199, 100), _w("Debit", 340, 357, 100),
+            _w("Credit", 394, 415, 100), _w("Balance", 462, 487, 100)]
+    above = [_w("Cheque", 280, 305, 95)]  # the heading of the blank-looking column, split over the lines around it
+    below = [_w("/Reference", 270, 304, 106), _w("No", 306, 315, 106)]
+    words = main + above + below
+    return PageGeometry(words=words, lines=group_lines(words), h_rules=[], v_rules=list(v_rules), width=600)
+
+
+def test_a_column_headed_on_the_lines_around_the_main_heading_is_found():
+    """BOM: "Cheque" sits above and "/Reference No" below the heading row, nothing on the row itself."""
+    from analyser.readers.layout import find_table
+    for rules in ((), [(x, 90, 120) for x in (12, 60, 160, 265, 322, 378, 434, 517)]):  # with and without ruled columns
+        table = find_table(_geometry(rules))
+        assert table is not None
+        fields = [c.field for c in table.columns]
+        assert "ref_no" in fields and fields.index("ref_no") == fields.index("debit") - 1, (rules, fields)

@@ -20,6 +20,7 @@ _IN_DESCRIPTION = [
     re.compile(r"^clg/[^/]+/(\d{6})/", re.I),  # deposited cheque: CLG/<drawer>/<chq no>/<bank>
 ]
 # A reference that is really a cheque number: short, or long but mostly leading zeros
+_CHEQUE_WORD = re.compile(r"chq|cheque|clg|clearing", re.I)
 _REF_AS_CHEQUE = re.compile(r"^0*(\d{1,8})$")
 
 
@@ -41,8 +42,11 @@ def assign_cheques(transactions: list[Transaction]) -> None:
                 break
         if t.cheque_no:
             continue
-        # Reference column holds the cheque number on cheque-type lines (e.g. KVB)
-        if t.mode in (CHEQUE, RETURN, CHARGES, CASH) and t.ref_no:
-            m = _REF_AS_CHEQUE.match(t.ref_no.strip())
+        # Reference column holds the cheque number on cheque-type lines (e.g. KVB). Cash and charge lines
+        # only count when they say cheque ("CHQ PAID-SELF", "CHQ RTN CHG"): an ATM or UPI reference is not one.
+        if t.mode in (CHEQUE, RETURN) or (t.mode in (CHARGES, CASH) and _CHEQUE_WORD.search(t.description or "")):
+            m = _REF_AS_CHEQUE.match((t.ref_no or "").strip())
             if m and (len(t.ref_no.strip()) <= 8 or t.ref_no.strip().startswith("0000")):
                 t.cheque_no = tidy(m.group(1))
+                if t.cheque_no == "0":  # an all-zero reference means none
+                    t.cheque_no = ""
