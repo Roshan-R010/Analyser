@@ -68,7 +68,7 @@
       <tr><th>Net</th><td class="n">{{ r.cashflow.total.net|inr }}</td><td></td></tr>
       <tr><th>Average balance</th><td class="n">{{ r.cashflow.total.avg_balance|inr }}</td><td></td></tr>
       <tr><th>Bounces (funds / other)</th><td class="n">{{ funds_count }} / {{ r.returns.bounces|length - funds_count }}</td><td></td></tr>
-      <tr><th>Lenders paid</th><td class="n">{{ r.loans|selectattr('payments')|list|length }}</td><td></td></tr>
+      <tr><th>Lenders paid</th><td class="n">{{ r.loans|selectattr('payments')|rejectattr('type', 'equalto', 'Possible lender')|list|length }}</td><td></td></tr>
     </table>
   </div>
   <div>
@@ -159,8 +159,8 @@ Transfers sent back (NEFT / RTGS / IMPS / UPI returns and reversals) are listed 
 <p class="note"><b>Party totals cover the statement period, not a monthly commitment.</b><br>
 Monthly patterns use actual payment dates. Extra payments stay separate.
 Variable amounts are grouped by party; totals are rounded to the nearest rupee.
-A party is shown when paid 3 or more times across 2 or more months (₹10,000+ in total, or any lender).</p>
-{% else %}<p class="muted">No recurring payments.</p>{% endif %}
+A party is shown when paid 3 or more times in the statement (₹10,000+ in total, or any lender). Monthly and weekly patterns appear when the statement is long enough to show them.</p>
+{% else %}<p class="muted">No recurring payments: no party was paid 3 or more times (₹10,000+ in total, or any lender) in this statement.</p>{% endif %}
 </section>
 
 {# ============================================================ LOANS #}
@@ -196,7 +196,7 @@ A party is shown when paid 3 or more times across 2 or more months (₹10,000+ i
 </table>
 <p class="note">Bank balance is the statement balance after each entry. Payment groups are based on the transaction narration.
 "+" marks money received from the lender.</p>
-{% else %}<p class="muted">No loan payments or disbursements found.</p>{% endif %}
+{% else %}<p class="muted">No loan payments or disbursements found: no known lender, finance or chit-fund name, and no EMI, installment or loan wording, appears in this statement.</p>{% endif %}
 </section>
 
 {# ============================================================ COUNTERPARTIES #}
@@ -251,7 +251,7 @@ A party is shown when paid 3 or more times across 2 or more months (₹10,000+ i
     {% for t, main, sub in b.rows %}
     <tr class="{{ 'in' if t.credit }}">
       <td>{{ t.date.strftime('%d %b') if all_year else t.date.strftime('%d %b %y') }}</td>
-      {% if chq %}<td>{{ t.cheque_no }}</td>{% endif %}
+      {% if chq %}<td>{{ t.cheque_no or '–' }}</td>{% endif %}
       <td class="n amt">{% if t.credit %}+{{ t.credit|inr2 }}{% else %}{{ t.debit|inr2 }}{% endif %}</td>
       <td class="n">{{ t.balance|inr }}</td>
       <td>{{ title(main) if chq else main }}{% if sub %}<div class="sub">{{ sub }}</div>{% endif %}</td>

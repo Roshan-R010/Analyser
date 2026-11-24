@@ -7,7 +7,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -16,7 +16,7 @@ from analyser.analysis import Report
 from analyser.profiles import load_profiles
 from analyser.report import charts
 from analyser.report.blocks import cashflow_page, returns_page
-from analyser.sections.flags import inr as _inr
+from analyser.fmt import inr, inr2
 from analyser.sections.loans import loan_blocks
 from analyser.sections.returns import FUNDS
 
@@ -39,23 +39,6 @@ def font_css(subsets=("latin", "latin-ext")) -> str:
         out.append("@font-face{font-family:Inter;font-style:normal;font-weight:100 900;"
                    f"src:url(data:font/woff2;base64,{data}) format('woff2');unicode-range:{_RANGES[sub]}}}")
     return "\n".join(out)
-
-
-def inr(x) -> str:
-    return "–" if x is None else _inr(Decimal(x))
-
-
-def inr2(x) -> str:
-    """With paise only when there are paise: 30,851.88 / 42,432."""
-    if x is None:
-        return "–"
-    x = Decimal(x)
-    whole = x.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-    if x == whole:
-        return _inr(whole)
-    paise = f"{abs(x):.2f}".split(".")[1]
-    head = _inr(x.copy_abs().to_integral_value(rounding="ROUND_FLOOR"))
-    return ("-" if x < 0 else "") + f"{head}.{paise}"
 
 
 def _or_blank(f):

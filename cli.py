@@ -20,28 +20,12 @@ import time
 from pathlib import Path
 
 from analyser.engine import LoadedStatement, load_statement
+from analyser.fmt import inr_paise as inr
 from analyser.model import ZERO
 from analyser.unlock import PasswordRequired, StatementError, WrongPassword
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "out"
-
-
-def inr(x) -> str:
-    """1234567.5 -> 12,34,567.50 (Indian grouping)."""
-    if x is None:
-        return "-"
-    neg = x < 0
-    whole, frac = f"{abs(x):.2f}".split(".")
-    head, tail = whole[:-3], whole[-3:]
-    groups = []
-    while len(head) > 2:
-        groups.insert(0, head[-2:])
-        head = head[:-2]
-    if head:
-        groups.insert(0, head)
-    s = ",".join(groups + [tail]) if groups else tail
-    return f"{'-' if neg else ''}{s}.{frac}"
 
 
 def saved_password(pdf: Path) -> str | None:
@@ -58,7 +42,7 @@ def saved_password(pdf: Path) -> str | None:
 
 def open_one(pdf: Path, password: str | None, with_picture: bool) -> LoadedStatement | None:
     password = password or saved_password(pdf)
-    for attempt in range(3):
+    for _ in range(3):
         try:
             return load_statement(pdf, password, with_picture=with_picture)
         except (PasswordRequired, WrongPassword) as exc:
@@ -142,7 +126,7 @@ def main() -> int:
     report = analyse(good)
     out = args.out or OUT / f"{_safe(report.borrower)}_report.pdf"
     paths = write_report(report, out, html_copy=args.html, json_copy=args.json)
-    print(f"\nFlags:")
+    print("\nFlags:")
     for f in report.flags:
         print(f"  [{f.level}] {f.text}")
     bad = [c for c in report.checks if not c.ok]

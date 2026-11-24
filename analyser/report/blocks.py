@@ -8,23 +8,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from analyser.sections.flags import inr as _inr
+from analyser.fmt import inr, inr2
 from analyser.sections.returns import FUNDS, TECHNICAL, UNKNOWN
-
-
-def inr(x) -> str:
-    return "–" if x is None else _inr(Decimal(x))
-
-
-def inr2(x) -> str:
-    """With paise only when there are paise: 30,851.88 / 42,432."""
-    if x is None:
-        return "–"
-    x = Decimal(x)
-    if x == x.to_integral_value():
-        return _inr(x.quantize(Decimal("1")))
-    head = _inr(x.copy_abs().to_integral_value(rounding="ROUND_FLOOR"))
-    return ("-" if x < 0 else "") + f"{head}.{f'{abs(x):.2f}'.split('.')[1]}"
 
 
 def _count(n: int, one: str, many: str | None = None) -> str:
@@ -71,7 +56,9 @@ def cashflow_page(cf) -> dict:
     for n in (3, 6, 9, 12):
         r = cf.last.get(n)
         if r:
-            rows.append(row(f"Last {n} months", r, sub=r.label.split("(")[1][:-1], rounded=True))
+            span = r.label.split("(")[1][:-1]
+            short = f" · the statement has only {len(cf.months)} month{'s' if len(cf.months) != 1 else ''}" if n > len(cf.months) else ""
+            rows.append(row(f"Last {n} months", r, sub=span + short, rounded=True))
         else:
             rows.append({"cells": [cell(f"Last {n} months"), {**cell("not enough months", cls="muted"), "span": 7}]})
     blocks.append({"title": "Recent months", "subline": "the last 3, 6, 9 and 12 months of the statement", "right": "",
