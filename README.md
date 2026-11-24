@@ -1,4 +1,4 @@
-# Statement Analyser
+# StatementSense
 
 Bank statement PDFs in, lending report out. The plan lives in `../plan.md`.
 
@@ -62,3 +62,19 @@ Lenders list: `analyser/data/lenders.yaml` (add new lenders there).
    ```
 4. Make a report and look at it: `.venv/Scripts/python cli.py tests/statements/<bank>/<file>.pdf`
 5. Run `.venv/Scripts/python -m pytest -q`. Every statement in the library must still pass.
+
+## Telegram bot (front door for now)
+
+People send statement PDFs to a Telegram bot and get the report PDF back. It uses `analyser/service.py`
+(the same two calls a website or WhatsApp bot will use) and long polling, so it needs no public address.
+
+1. On Telegram, talk to **@BotFather**, send `/newbot`, copy the token.
+2. Copy `.env.example` to `.env` and put the token in `TELEGRAM_BOT_TOKEN`.
+3. `.venv/Scripts/python run_bot.py`, then send `/myid` to your bot and put the number in `ALLOWED_USERS` in `.env`
+   (comma separated for several people). With none listed, nobody can use the bot. Restart the bot.
+4. In the chat: send the PDF(s) of one borrower (it asks for a password if needed), then `/report`.
+
+Statements live in a temp folder only until the report is sent; passwords are never stored and their
+message is deleted; the log has ids and events only. Telegram bot chats are not end-to-end encrypted,
+so tell borrowers where their statement goes. Telegram lets a bot download files up to 20 MB.
+The bot runs only while `run_bot.py` is running: for 24/7 it needs an always-on machine (a small server).
