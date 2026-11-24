@@ -36,6 +36,9 @@ CHANNEL_WORDS = {
     "RTGSDR", "BPAY", "BBPS", "POS", "ECOM", "VPS", "IPS", "PCD", "DEBIT", "CREDIT", "CARD", "REJ",
     "DISBURSEMENT", "DISB", "P2M", "P2P", "TPFT", "PUR", "PAYMEN", "PAYME", "PAYM", "ACCOUNT", "REQUES",
     "IFT", "BRN", "INSTALLMENT", "INSTALMENT", "REMITTER", "TRANSFE",
+    "UPIOUT", "IFO", "IFI", "IFN", "FRO", "NFT", "RTG", "INW", "OUTW", "OPM", "PMT", "MID", "SETDT",
+    "CHQPAID", "CTSS", "RKS", "NWD", "ATW", "CLGINWPR", "CHQNO", "TRANSAC", "UP", "PAYMENTF", "PAYMENTFRO", "PAYMENTFROM",
+    "IBFUNDSTRANSFERCR", "IBFUNDSTRANSFERDR",
 }
 # The description itself says it went to the borrower's own account
 SELF_TEXT = re.compile(r"self\s*transf|own\s*a/?c\s*transf", re.I)
@@ -79,6 +82,7 @@ PLACES = {"CHENNAI", "MUMBAI", "DELHI", "NEW DELHI", "KOLKATA", "BANGALORE", "BE
 # Bank codes some banks glue onto names ("ZEN INDUSTICIC" = "ZEN INDUST" + ICIC)
 GLUED_BANK = re.compile(r"(?<=[A-Za-z]{4})(ICIC|HDFC|SBIN|IOBA|KVBL|UTIB)$", re.I)
 REMARK_AFTER_MASK = re.compile(r"x{3,}\d+", re.I)  # IMPS: anything after a masked account is a remark
+BRANCH_TAIL = re.compile(r"/?\s*BRANCH\s*:", re.I)  # "/BRANCH : ATM SERVICE BRANCH"
 IFSC = re.compile(r"^[A-Z]{4}0[A-Z0-9]{6}$", re.I)
 VPA = re.compile(r"[^\s/|]*@[^\s/|]*")  # a UPI id never contains "/"
 # "balareddy29011okicici" (VPA with the @ lost) -> "balareddy"
@@ -149,9 +153,10 @@ def extract_name(description: str, allow_bank: bool = False) -> str:
     """
     text = description or ""
     text = REMARK_AFTER_MASK.split(text)[0]  # drop the free-text remark after a masked account
+    text = BRANCH_TAIL.split(text)[0]  # the bank's own branch is never the party
     text = VPA.sub(" / ", text)
     pieces = re.split(r"[/:|\\]+|-+|_|\s{2,}", text)
-    for piece in pieces:
+    for piece in _before_bank_code(pieces):
         if not allow_bank and is_bank_piece(piece):
             continue
         name = _clean_piece(piece, allow_bank)
@@ -161,6 +166,31 @@ def extract_name(description: str, allow_bank: bool = False) -> str:
         if re.fullmatch(r"SELF", name, re.I):
             return "SELF"
     return ""
+
+
+def _before_bank_code(pieces):
+    """Pieces up to "<account>/SBIN/Monthly": what follows the bank code is the sender's remark.
+    (In "NEFT/TMBL/TMBLN123/SADHIK VEG" the name comes after the code, so that is left alone.)"""
+    prev = ""
+    for piece in pieces:
+        p = piece.strip()
+        if len(p) == 4 and p.upper() in BANK_CODES and re.search(r"\d{6,}$", prev):
+            return
+        prev = p
+        yield piece
+
+
+def vpa_name(description: str) -> str:
+    """The name part of a UPI id ("hussainsheik486-3@okaxis" -> "HUSSAINSHEIK"), for
+    descriptions that name no one else. A phone-number id stays as the number."""
+    m = re.search(r"([A-Za-z0-9._-]{3,})@[A-Za-z]", description or "")
+    if not m:
+        return ""
+    local = m.group(1)
+    if local.replace("-", "").isdigit():
+        return local
+    stripped = re.sub(r"[\d._-]+$", "", local)
+    return (stripped if sum(c.isalpha() for c in stripped) >= 3 else local).upper()
 
 
 def name_key(name: str) -> str:
@@ -234,7 +264,12 @@ def assign_parties(transactions: list[Transaction], holders: list[str],
         elif t.mode == M.RETURN:
             special = RETURNS
         else:
-            raw = extract_name(t.description, allow_bank=(t.mode == M.ECS))
+            if t.mode == M.CARD and re.search(r"card\s*pmt", t.description or "", re.I):
+                raw = "CARD SETTLEMENT"  # a card machine's payout to the borrower, not a person
+            else:
+                raw = extract_name(t.description, allow_bank=(t.mode == M.ECS))
+            if not raw and t.mode == M.UPI:
+                raw = vpa_name(t.description)
             if not raw:
                 sides = dict((s.upper(), d) for s, d in MASKED_SIDE.findall(t.description or ""))
                 other = sides.get("CR") if t.debit else sides.get("DR")

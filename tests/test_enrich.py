@@ -280,3 +280,36 @@ def test_loan_page_wording():
     assert "received" in b.subline
     assert [w for _, w in b.rows] == ["Loan amount received", "Monthly auto-debit", "Monthly auto-debit",
                                       "Additional auto-debit", "Monthly auto-debit"]
+
+
+# ---- formats added with CUB, Federal, HDFC, IDFC and Indian Bank
+
+def test_remark_after_bank_code_is_not_a_party():
+    from analyser.enrich.parties import extract_name
+    # "<account>/SBIN/Monthly": Monthly is the sender's remark
+    assert extract_name("TRANSFER TO 97158026315 041770111617/SBIN/Monthly //IMPS/P2A/52//BRANCH : ATM") == ""
+    # ...but in NEFT the name follows the bank code
+    assert extract_name("TRANSFER FROM 9715 NEFT/TMBL/TMBLN12345/SADHIK VEG//BRANCH: MUM") == "SADHIK VEG"
+
+
+def test_upi_without_a_name_uses_the_upi_id():
+    from analyser.enrich.parties import extract_name, vpa_name
+    d = "UPIOUT/551934632592/ajithkanna1992@oksbi/UPI/0000"
+    assert extract_name(d) == "" and vpa_name(d) == "AJITHKANNA"
+    assert vpa_name("UPIOUT/1/8248071711@ybl/UPI/0000") == "8248071711"
+
+
+def test_new_bank_modes():
+    from analyser.enrich.modes import classify
+    from analyser.model import Transaction
+    from datetime import date
+    from decimal import Decimal
+
+    def mode(desc):
+        return classify(Transaction(date=date(2026, 1, 1), description=desc, debit=Decimal(1)))
+    assert mode("POS223487XXXXXX201200000000371105APR2") == "Card"
+    assert mode("NWD-223487XXXXXX2012-41021HRY-CHENNAI") == "Cash"
+    assert mode("ACHDEBITRETURNCHARGES001-CDT") == "Charges"
+    assert mode("BY ONL 0000IMPSFBL533516998980:IMMAM AHAM/SIRAJ MILK::00028") == "IMPS"
+    assert mode("UPIOUT/551954241958/q341186444@ybl/UPI/5441") == "UPI"
+    assert mode("INW_CLG :ClgInwPr: SABARI CORP ,ChqNo:12") == "Cheque"
