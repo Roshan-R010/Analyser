@@ -116,6 +116,8 @@ def read_statement(pdf, bank: str = "unknown", options: ReaderOptions | None = N
 
     for row in rows:
         _add_row(st, row, options)
+    if _is_newest_first(st.transactions):
+        st.transactions.reverse()
     _read_printed_totals(pdf, st, options)
     if st.opening_balance is None and st.transactions and st.transactions[0].balance is not None:
         first = st.transactions[0]
@@ -126,12 +128,25 @@ def read_statement(pdf, bank: str = "unknown", options: ReaderOptions | None = N
     return st
 
 
+def _is_newest_first(tx: list[Transaction]) -> bool:
+    """Some banks (IOB's newer layout) list the latest entry first. The balance column says which way
+    the list runs: each balance is the one beside it plus or minus that row's amount."""
+    pairs = list(zip(tx, tx[1:]))
+    forward = sum(b.balance is not None and a.balance is not None and a.balance + b.amount == b.balance
+                  for a, b in pairs)
+    backward = sum(b.balance is not None and a.balance is not None and b.balance + a.amount == a.balance
+                   for a, b in pairs)
+    return backward > forward
+
+
 # ---------------------------------------------------------------- rows
 
 def _is_anchor(line_words: list[Word], table: Table) -> bool:
     """Does this line start a transaction (a date in the date column)?"""
     date_col = table.by_field()["date"]
     text = " ".join(w.text for w in line_words if date_col.x0 <= w.xc < date_col.x1)
+    if text.startswith("("):
+        return False  # "(23-Aug-26)": the value date printed under the date, not a new entry
     return parse_date(text) is not None or bool(re.match(r"\d{1,2}[-/ ][A-Za-z]{3}[-/ ]?$", text))
 
 

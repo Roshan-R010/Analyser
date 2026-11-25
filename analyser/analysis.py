@@ -21,6 +21,7 @@ from analyser.sections.modes import ModeShare, build_mode_split
 from analyser.sections.parties import MonthParties, UnknownSection, build_month_parties, build_unknown
 from analyser.sections.recurring import RecurringRow, build_recurring
 from analyser.sections.returns import ReturnsSection, build_returns
+from analyser.sections.suspicion import SuspiciousStatement, build_suspicion, suspicion_flag
 from analyser.verify import VerifyResult, verify
 
 
@@ -42,6 +43,7 @@ class Report:
     modes_out: list[ModeShare]
     flags: list[Flag] = field(default_factory=list)
     checks: list[Check] = field(default_factory=list)
+    suspicious: list[SuspiciousStatement] = field(default_factory=list)
 
     @property
     def borrower(self) -> str:
@@ -54,15 +56,18 @@ class Report:
 
 
 def analyse(loaded: list) -> Report:
-    """`loaded` are LoadedStatement objects whose balance check passed."""
+    """`loaded` are LoadedStatement objects that are `reportable`: balance check passed, or a known layout
+    whose numbers don't add up (reported as suspicious)."""
     for i, ls in enumerate(loaded, start=1):
         ls.statement.statement_no = i
         for t in ls.statement.transactions:
             t.statement_no = i
     accounts = combine([ls.statement for ls in loaded])
     account_checks = []
+    suspect = {id(ls.statement) for ls in loaded if ls.suspicious}
     for acc in accounts:
-        if len(acc.statements) > 1:
+        # Joins are only worth checking between statements that each add up
+        if len(acc.statements) > 1 and not any(id(st) in suspect for st in acc.statements):
             joined = Statement(bank=acc.bank, opening_balance=acc.opening_balance, transactions=acc.transactions)
             account_checks.append((acc, verify(joined)))
 
@@ -83,5 +88,7 @@ def analyse(loaded: list) -> Report:
     )
     notes = [n for acc in accounts for n in acc.notes]
     report.flags = build_flags(tx, daily, returns, report.loans, notes, cashflow.total.avg_balance)
+    report.suspicious = build_suspicion(loaded)
+    report.flags[:0] = [Flag("high", suspicion_flag(s)) for s in report.suspicious]
     report.checks = build_checks(report)
     return report

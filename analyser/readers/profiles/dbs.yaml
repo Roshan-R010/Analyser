@@ -1,0 +1,7 @@
+id: dbs
+name: DBS Bank India
+detect:
+  # No bank name or IFSC is printed: this statement's account summary is its signature
+  header: ['Earmark Amount', 'Overdraft Limit']
+details:
+  holder: 'Account Name\s*:\s*(?P<h>.+?)\s*-?\s*$'

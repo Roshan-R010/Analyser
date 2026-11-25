@@ -50,7 +50,11 @@ def verify(st: Statement) -> VerifyResult:
             res.breaks.append(_brk(i, t, expected, None))
             prev = expected
             continue
-        if t.balance != expected:
+        if t.balance == -expected and expected < 0:
+            # Some banks print an overdrawn balance without its minus sign (Indian Bank): the row is
+            # right, the printed sign is missing. Keep the true negative balance.
+            t.balance = expected
+        elif t.balance != expected:
             res.breaks.append(_brk(i, t, expected, t.balance))
         prev = t.balance  # carry on from the printed balance so one bad row = one break
 

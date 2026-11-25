@@ -22,22 +22,14 @@ from pathlib import Path
 from analyser.engine import LoadedStatement, load_statement
 from analyser.fmt import inr_paise as inr
 from analyser.model import ZERO
-from analyser.unlock import PasswordRequired, StatementError, WrongPassword
+from analyser.unlock import PasswordRequired, StatementError, WrongPassword, read_password_file
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "out"
 
 
 def saved_password(pdf: Path) -> str | None:
-    f = ROOT / "passwords.txt"
-    if not f.is_file():
-        return None
-    for line in f.read_text(encoding="utf-8").splitlines():
-        if "=" in line and not line.strip().startswith("#"):
-            name, pw = line.split("=", 1)
-            if name.strip().lower() == pdf.name.lower():
-                return pw.strip()
-    return None
+    return read_password_file(ROOT / "passwords.txt").get(pdf.name)
 
 
 def open_one(pdf: Path, password: str | None, with_picture: bool) -> LoadedStatement | None:
@@ -69,7 +61,8 @@ def describe(ls: LoadedStatement) -> None:
     if check.ok:
         print(f"     balance check PASSED ({check.rows_checked} rows)")
     else:
-        print("     balance check FAILED: format not supported yet, so this statement is left out")
+        print("     balance check FAILED: " + ("SUSPICIOUS, it goes into the report marked as such"
+                                                 if ls.reportable else "layout not supported yet, left out"))
         for b in check.breaks[:5]:
             print(f"       page {b.page_no}, {b.date}: expected {inr(b.expected)}, "
                   f"statement shows {inr(b.printed)}  | {b.description[:50]}")
@@ -112,7 +105,7 @@ def main() -> int:
             loaded.append(ls)
             if args.csv and ls.statement.transactions:
                 print(f"     saved {write_csv(ls)}")
-    good = [ls for ls in loaded if ls.supported]
+    good = [ls for ls in loaded if ls.reportable]
     if args.check_only:
         return 0 if good and len(good) == len(args.pdfs) else 2
     if not good:
@@ -136,6 +129,9 @@ def main() -> int:
     print(f"\nReport: {paths['pdf']}")
     if "json" in paths:
         print(f"Summary: {paths['json']}")
+    sus = [ls.file_name for ls in good if ls.suspicious]
+    if sus:
+        print(f"SUSPICIOUS (balances do not add up): {', '.join(sus)}")
     if len(good) < len(args.pdfs):
         print(f"Note: {len(args.pdfs) - len(good)} statement(s) left out (see above).")
     print(f"Done in {time.time() - t0:.1f}s")

@@ -21,6 +21,7 @@ from analyser.unlock import open_statement
 from analyser.verify import VerifyResult, verify
 
 FIRST_PAGE_DPI = 110
+MAX_SUSPECT_BREAKS = 5  # a known layout with more broken rows than this (and 20% of rows) is a misread
 
 
 @dataclass
@@ -32,8 +33,24 @@ class LoadedStatement:
 
     @property
     def supported(self) -> bool:
-        """True only when every balance adds up. Otherwise numbers must not be shown."""
+        """True when every balance adds up."""
         return self.check.ok
+
+    @property
+    def reportable(self) -> bool:
+        """A report can be made from it: it adds up, or it is a layout we know whose numbers don't
+        (then it is reported as suspicious). An unknown bank, a layout that reads no rows or breaks
+        on most of them is a reading failure, not a finding: those are refused."""
+        c, st = self.check, self.statement
+        if c.ok:
+            return True
+        if st.bank == UNKNOWN or not st.transactions or st.opening_balance is None:
+            return False
+        return len(c.breaks) <= max(MAX_SUSPECT_BREAKS, c.rows_checked // 5)
+
+    @property
+    def suspicious(self) -> bool:
+        return self.reportable and not self.check.ok
 
 
 def _page_png(page) -> bytes:

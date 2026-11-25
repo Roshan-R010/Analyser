@@ -34,7 +34,7 @@ from analyser import service
 log = logging.getLogger("tgbot")
 
 MAX_FILE_MB = 20  # Telegram lets bots download up to 20 MB
-MAX_FILES = 2  # statements per borrower in one report
+MAX_FILES = 6  # statements per borrower in one report
 MAX_PASSWORD_TRIES = 3
 SEND_TIMEOUT = 180  # seconds to upload a report: a 2-3 MB PDF over a slow line needs far more than the default 5-20
 SEND_TRIES = 2
@@ -42,7 +42,7 @@ BUSY = asyncio.Semaphore(1)  # reading and printing are heavy: one at a time, ev
 
 HELP = (
     "StatementSense reads bank statements and makes a lending report.\n\n"
-    "Send me bank statement PDFs of one borrower (up to 2), then send /report.\n\n"
+    f"Send me bank statement PDFs of one borrower (up to {MAX_FILES}), then send /report.\n\n"
     "If a statement has a password I will ask for it. I use it once and delete your message.\n"
     "/clear starts again · /myid shows your Telegram id"
 )
@@ -194,8 +194,9 @@ async def _read(update: Update, context: ContextTypes.DEFAULT_TYPE, path: Path, 
         s.waiting = None
         if outcome.ok:
             s.files.append(outcome)
-            await update.message.reply_text(f"✓ {outcome.name}\n{outcome.message}\n\nSend more statements of the same "
-                                            "borrower, or /report.")
+            mark = "⚠" if outcome.status == service.SUSPICIOUS else "✓"
+            await update.message.reply_text(f"{mark} {outcome.name}\n{outcome.message}\n\nSend more statements of the "
+                                            "same borrower, or /report.")
         else:
             path.unlink(missing_ok=True)
             await update.message.reply_text(f"✕ {outcome.name}\n{outcome.message}")

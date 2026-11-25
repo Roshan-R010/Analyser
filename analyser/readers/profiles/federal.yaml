@@ -3,7 +3,10 @@ name: Federal Bank
 detect:
   header: ['\bFDRL0\d{6}\b', 'Federal Bank']
 details:
-  holder: 'Name\s*:\s*(?P<h>.+?)\s+Branch Name\s*:'
+  holder:
+    - 'Name\s*:\s*(?P<h>.+?)\s+Branch Name\s*:'
+    # Newer layout: "Name : <HOLDER> : <branch name>" beside a lone "Branch Name" heading
+    - '^Name\s*:\s*(?P<h>.+?)\s+:\s'
 # The bank's printed GRAND TOTAL drops digits (debit 10919485.4 for 10919485.46), so it is not used
 reader:
   description_join: auto

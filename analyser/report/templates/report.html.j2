@@ -24,60 +24,87 @@
 </table>
 {% endmacro %}
 
-{# ============================================================ SUMMARY #}
-<header class="top">
-  <div>
-    <div class="eyebrow">Bank Statement Analysis</div>
-    <h1>{{ r.borrower }}</h1>
-    <div class="muted">{{ period }} · generated {{ generated }}</div>
-  </div>
-  <div class="verdict {{ 'ok' if r.all_checks_ok else 'bad' }}">
-    {% if r.all_checks_ok %}✓ All balances and totals verified{% else %}✕ Some checks failed – see Checks{% endif %}
-  </div>
-</header>
+{# ============================================================ SUMMARY (first page, same look as the pages after it) #}
+<section class="summary">
+<div class="pagehead">
+  <div><div class="eyebrow">Bank statement analysis</div><h1>{{ r.borrower }}</h1><div class="muted">{{ accounts_line }}</div></div>
+  <div class="period">{{ short_period }}<div class="muted gen">Generated {{ generated }}</div></div>
+</div>
 
-<table class="grid accounts">
+{% if r.suspicious %}
+<div class="verdict bad">
+  <div class="vtitle">Suspicious statement</div>
+  <div class="vtext">
+    {% for s in r.suspicious %}
+    <p><b>Statement {{ s.statement_no }}: the numbers do not add up.</b>
+      {% if not s.breaks %}{% for p in s.problems %}{{ p }}. {% endfor %}{% endif %}</p>
+    <ul>{% for w in s.what_might_be_wrong %}<li>{{ w }}</li>{% endfor %}</ul>
+    {% endfor %}
+    <p class="muted">The figures in this report are read from the statement as printed. Treat them with care until the original is checked.</p>
+  </div>
+</div>
+{% elif r.all_checks_ok %}
+<div class="verdict ok"><div class="vtitle">Verified</div>
+  <div class="vtext">Every balance and every total in the statement adds up, and every figure in this report was cross-checked.</div></div>
+{% else %}
+<div class="verdict bad"><div class="vtitle">Check failed</div>
+  <div class="vtext">Some cross-checks failed. They are listed under Checks below.</div></div>
+{% endif %}
+
+<div class="stats">
+  <div><div class="label">Money in · {{ r.cashflow.total.cr_entries|int }} entries</div><div class="big">₹{{ r.cashflow.total.credit|inr }}</div></div>
+  <div><div class="label">Money out · {{ r.cashflow.total.dr_entries|int }} entries</div><div class="big">₹{{ r.cashflow.total.debit|inr }}</div></div>
+  <div><div class="label">Net cashflow</div><div class="big">₹{{ r.cashflow.total.net|inr }}</div></div>
+  <div><div class="label">Average balance</div><div class="big">₹{{ r.cashflow.total.avg_balance|inr }}</div></div>
+</div>
+<div class="stats small">
+  <div><div class="label">Cheque bounces (funds / other)</div><div class="mid">{{ funds_count }} / {{ r.returns.bounces|length - funds_count }}</div></div>
+  <div><div class="label">Lenders paid</div><div class="mid">{{ r.loans|selectattr('payments')|rejectattr('type', 'equalto', 'Possible lender')|list|length }}</div></div>
+  <div><div class="label">Statements</div><div class="mid">{{ r.statements|length }}</div></div>
+</div>
+
+{% if suspicion_page.blocks %}
+<h2 class="sec">Where it does not add up</h2>
+{{ block_table(suspicion_page.cols, suspicion_page.blocks) }}
+<p class="note">"Should be" is the balance before the entry plus the entry. "Printed" is what the statement shows.
+Page numbers are the page of the statement PDF.</p>
+{% endif %}
+
+<h2 class="sec">Statements</h2>
+<table class="loantable plain">
+  <colgroup><col style="width:3%"><col style="width:11%"><col style="width:19%"><col style="width:10%"><col style="width:21%">
+    <col style="width:11%"><col style="width:11%"><col style="width:6%"><col style="width:8%"></colgroup>
   <thead><tr><th>#</th><th>Bank</th><th>Account holder</th><th>Account</th><th>Period</th>
-    <th class="n">Opening</th><th class="n">Closing</th><th class="n">Entries</th></tr></thead>
+    <th class="n">Opening (₹)</th><th class="n">Closing (₹)</th><th class="n">Entries</th><th>Status</th></tr></thead>
   <tbody>
   {% for s in r.statements %}{% set st = s.statement %}
     <tr><td>{{ st.statement_no }}</td><td>{{ bank_name(st.bank) }}</td><td>{{ st.account_holder or '–' }}</td>
       <td>{{ mask(st.account_no) }}</td><td>{{ st.period_from|d }} – {{ st.period_to|d }}</td>
       <td class="n">{{ st.opening_balance|inr2 }}</td>
       <td class="n">{{ (st.transactions[-1].balance if st.transactions else None)|inr2 }}</td>
-      <td class="n">{{ st.transactions|length }}</td></tr>
+      <td class="n">{{ st.transactions|length }}</td>
+      <td class="{{ 'warnword' if st.statement_no in suspect_nos else 'goodword' }}">{{ 'Suspicious' if st.statement_no in suspect_nos else 'Verified' }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
 
-<h2>Flags</h2>
+<h2 class="sec">Flags</h2>
 {% if r.flags %}
-<ul class="flags">
+<div class="flaglist">
   {% for f in r.flags %}
-  <li class="{{ f.level }}"><span class="badge">{{ {'high': '✕ High', 'watch': '▲ Watch', 'info': 'ℹ Info'}[f.level] }}</span>{{ f.text }}</li>
+  <div class="flag {{ f.level }}"><span class="lvl">{{ {'high': 'High', 'watch': 'Watch', 'info': 'Note'}[f.level] }}</span><span>{{ f.text }}</span></div>
   {% endfor %}
-</ul>
+</div>
 {% else %}<p class="muted">Nothing to flag.</p>{% endif %}
 
-<div class="cols">
-  <div>
-    <h3>Totals</h3>
-    <table class="grid kv">
-      <tr><th>Money in</th><td class="n">{{ r.cashflow.total.credit|inr }}</td><td class="n muted">{{ r.cashflow.total.cr_entries|int }} entries</td></tr>
-      <tr><th>Money out</th><td class="n">{{ r.cashflow.total.debit|inr }}</td><td class="n muted">{{ r.cashflow.total.dr_entries|int }} entries</td></tr>
-      <tr><th>Net</th><td class="n">{{ r.cashflow.total.net|inr }}</td><td></td></tr>
-      <tr><th>Average balance</th><td class="n">{{ r.cashflow.total.avg_balance|inr }}</td><td></td></tr>
-      <tr><th>Bounces (funds / other)</th><td class="n">{{ funds_count }} / {{ r.returns.bounces|length - funds_count }}</td><td></td></tr>
-      <tr><th>Lenders paid</th><td class="n">{{ r.loans|selectattr('payments')|rejectattr('type', 'equalto', 'Possible lender')|list|length }}</td><td></td></tr>
-    </table>
-  </div>
-  <div>
-    <h3>Checks</h3>
-    <ul class="checks">
-      {% for c in r.checks %}<li class="{{ 'ok' if c.ok else 'bad' }}">{{ '✓' if c.ok else '✕' }} {{ c.name }}{% if c.detail %} <span class="muted">({{ c.detail }})</span>{% endif %}</li>{% endfor %}
-    </ul>
-  </div>
+<h2 class="sec">Checks</h2>
+<div class="checklist">
+  {% for c in r.checks %}
+  <div class="chk {{ 'ok' if c.ok else 'bad' }}"><span class="lvl">{{ 'Pass' if c.ok else 'Fail' }}</span>
+    <span>{{ c.name }}{% if c.detail %} <span class="muted">· {{ c.detail }}</span>{% endif %}</span></div>
+  {% endfor %}
 </div>
+</section>
 
 {# ============================================================ ORIGINAL STATEMENTS #}
 {% for s in r.statements %}{% if s.first_page_png %}

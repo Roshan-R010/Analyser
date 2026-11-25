@@ -100,3 +100,28 @@ def returns_page(rs) -> dict:
         sent_blocks.append({"title": "Transfers sent back", "subline": _count(len(txs), "entry", "entries") + " · not cheque bounces",
                             "right": io_line(txs), "rows": rows})
     return {"cols": columns, "blocks": blocks, "sent_cols": sent_cols, "sent_blocks": sent_blocks}
+
+
+# ---------------------------------------------------------------- suspicious statements
+
+def suspicion_page(report) -> dict:
+    """Where each suspicious statement stops adding up, in the block style of the other pages."""
+    columns = cols(("Page", "", 6), ("Date", "", 10), ("Entry", "", 29), ("Balance before (₹)", "n", 12),
+                   ("Entry (₹)", "n", 11), ("Should be (₹)", "n", 11), ("Printed (₹)", "n", 11),
+                   ("Gap (₹)", "n", 10))
+    blocks = []
+    for s in report.suspicious:
+        rows = []
+        for f in s.findings:
+            amount = f"+{inr2(f.credit)}" if f.credit else f"-{inr2(f.debit)}"
+            rows.append({"cells": [
+                cell(str(f.page_no)), cell(f"{f.date:%d %b %y}"), cell(f.description, f.hint),
+                cell(inr2(f.previous), cls="n"), cell(amount, cls="n"), cell(inr2(f.expected), cls="n"),
+                cell(inr2(f.printed) if f.printed is not None else "none printed", cls="n amt"),
+                cell(inr2(f.difference) if f.difference is not None else "–", cls="n warn")]})
+        more = f"+{s.more} more not listed" if s.more else ""
+        title = f"Statement {s.statement_no} · {s.file_name}" if s.file_name else f"Statement {s.statement_no}"
+        sub = (_count(s.breaks, "entry", "entries") + " out of " + str(s.rows) + " do not add up") if s.breaks \
+            else " · ".join(s.problems)
+        blocks.append({"title": title, "subline": sub, "right": more, "bad": True, "rows": rows})
+    return {"cols": columns, "blocks": [b for b in blocks if b["rows"]]}

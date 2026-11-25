@@ -36,10 +36,12 @@ def test_statement_reads_as_expected(expected, passwords):
 
 
 @pytest.mark.parametrize("pdf", library_pdfs(rejected=True), ids=lambda p: p.stem)
-def test_rejected_statement_stays_rejected(pdf, passwords):
-    """A statement whose own balances don't add up (bank error or an edited file) is never reported."""
+def test_rejected_statement_is_reported_as_suspicious(pdf, passwords):
+    """A statement of a known layout whose own balances don't add up (bank error or an edited file) is
+    reported, marked suspicious, with the entries where it breaks."""
     loaded = load(pdf.name)
     assert not loaded.check.ok and not loaded.supported
+    assert loaded.reportable and loaded.suspicious
 
 
 def test_every_statement_has_expected_totals():

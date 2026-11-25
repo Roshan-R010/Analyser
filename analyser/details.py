@@ -42,19 +42,21 @@ def _clean(name: str) -> str:
     return re.sub(r"^(M/S\.?|MS\.?|MR\.?|MRS\.?)\s+", "", name, flags=re.I)
 
 
+def _as_list(value) -> list[str]:
+    """A profile gives one pattern or a list of them (a bank may print its header in two layouts)."""
+    return [value] if isinstance(value, str) else list(value or [])
+
+
 def read_details(header: str, profile_raw: dict | None = None) -> Details:
     d = Details()
 
-    custom_no = ((profile_raw or {}).get("details") or {}).get("account_no")
-    m = (re.search(custom_no, header, re.M) if custom_no else None) or ACCOUNT_NO.search(header)
+    cfg = (profile_raw or {}).get("details") or {}
+    own = (re.search(p, header, re.M) for p in _as_list(cfg.get("account_no")))
+    m = next(filter(None, own), None) or ACCOUNT_NO.search(header)
     if m:
         d.account_no = m.group(1).replace(" ", "")
 
-    patterns = []
-    custom = ((profile_raw or {}).get("details") or {}).get("holder")
-    if custom:
-        patterns.append(re.compile(custom, re.M))
-    patterns += HOLDER
+    patterns = [re.compile(p, re.M) for p in _as_list(cfg.get("holder"))] + HOLDER
     for pat in patterns:
         m = pat.search(header)
         if m:

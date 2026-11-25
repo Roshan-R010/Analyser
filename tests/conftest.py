@@ -10,24 +10,17 @@ from pathlib import Path
 
 import pytest
 
+from analyser.unlock import read_password_file
+
 ROOT = Path(__file__).resolve().parent.parent
 STATEMENTS = ROOT / "tests" / "statements"
 EXPECTED = ROOT / "tests" / "expected"
 PASSWORDS_FILE = ROOT / "passwords.txt"
 
 
-def load_passwords() -> dict[str, str]:
+def load_passwords():
     """Read `filename.pdf = password` lines from passwords.txt."""
-    if not PASSWORDS_FILE.is_file():
-        return {}
-    out = {}
-    for line in PASSWORDS_FILE.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, pw = line.split("=", 1)
-        out[name.strip()] = pw.strip()
-    return out
+    return read_password_file(PASSWORDS_FILE)
 
 
 @pytest.fixture(scope="session")

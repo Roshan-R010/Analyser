@@ -15,7 +15,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from analyser.analysis import Report
 from analyser.profiles import load_profiles
 from analyser.report import charts
-from analyser.report.blocks import cashflow_page, returns_page
+from analyser.report.blocks import cashflow_page, returns_page, suspicion_page
 from analyser.fmt import inr, inr2
 from analyser.sections.loans import loan_blocks
 from analyser.sections.returns import FUNDS
@@ -158,7 +158,8 @@ def render_html(r: Report, generated: datetime | None = None) -> str:
     loan_years = sorted({t.date.year for ln in r.loans for t in ln.entries})
     return env.get_template("report.html.j2").render(
         r=r, css=font_css() + "\n" + (TEMPLATES / "report.css").read_text(encoding="utf-8"),
-        cash_page=cashflow_page(cf), returns_page=returns_page(r.returns),
+        cash_page=cashflow_page(cf), returns_page=returns_page(r.returns), suspicion_page=suspicion_page(r),
+        suspect_nos={s.statement_no for s in r.suspicious},
         returns_money=sum((b.amount or 0 for b in r.returns.bounces), Decimal(0)),
         returns_charges=sum((b.charge_total for b in r.returns.bounces), Decimal(0)),
         period=f"{_d(first)} – {_d(last)}", short_period=_short_period(first, last),
@@ -219,6 +220,12 @@ def summary_json(r: Report) -> dict:
     return {
         "borrower": r.borrower,
         "all_checks_ok": r.all_checks_ok,
+        "suspicious": [{"statement": s.statement_no, "level": s.level, "entries_not_adding_up": s.breaks,
+                        "entries_checked": s.rows, "problems": s.problems,
+                        "places": [{"page": f.page_no, "date": num(f.date), "entry": f.description,
+                                    "balance_before": num(f.previous), "should_be": num(f.expected),
+                                    "printed": num(f.printed), "hint": f.hint} for f in s.findings]}
+                       for s in r.suspicious],
         "statements": [{"no": s.statement.statement_no, "bank": s.statement.bank,
                         "account": _mask(s.statement.account_no),
                         "from": num(s.statement.period_from), "to": num(s.statement.period_to),

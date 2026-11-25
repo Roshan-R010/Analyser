@@ -3,7 +3,10 @@ name: ICICI Bank
 detect:
   # Checked only in the statement header (above the transaction table),
   # because other banks' codes appear inside transaction descriptions.
-  header: ['\bICIC0\d{6}\b']
+  header: ['\bICIC0\d{6}\b', 'Your Base Branch:\s*ICICI BANK']
+details:
+  # Savings-account download: "<HOLDER> Your Base Branch: ICICI BANK LIMITED,"
+  holder: '^(?P<h>[A-Z][A-Z .&]+?)\s+Your Base Branch:'
 reader:
   # ICICI wraps descriptions in a narrow column, cutting words mid-way
   description_join: auto

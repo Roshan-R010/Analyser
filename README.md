@@ -20,8 +20,11 @@ python -m venv .venv
 .venv/Scripts/python cli.py statement.pdf --check-only         # just read + balance check
 ```
 
-Writes the report PDF and a JSON summary (for the website/WhatsApp later). A statement whose
-balances don't all add up is left out with a message, never shown with wrong numbers.
+Writes the report PDF and a JSON summary (for the website/WhatsApp later).
+
+A statement whose balances don't add up is handled by what we know of it: a **known bank layout** is
+still reported, marked **SUSPICIOUS** on page 1 with the pages and entries where it breaks; an **unknown
+bank, or a layout that reads no rows or breaks on most of them**, is refused (nothing is shown).
 
 ## How it works
 
@@ -60,8 +63,14 @@ Lenders list: `analyser/data/lenders.yaml` (add new lenders there).
    details:
      holder: '...'                    # only if the holder's name isn't found
    ```
+   Profile extras: `details.holder` / `details.account_no` may be a list of patterns (a bank with two
+   header layouts); a statement that lists the newest entry first is turned around automatically.
 4. Make a report and look at it: `.venv/Scripts/python cli.py tests/statements/<bank>/<file>.pdf`
+   Or make one for every account in the library: `.venv/Scripts/python tools/make_reports.py [bank ...]`
+   (reports in `out/library/<bank>/`, one line each with its checks and flags).
 5. Run `.venv/Scripts/python -m pytest -q`. Every statement in the library must still pass.
+   Name a new file `<bank>_<last 4 of account>_<from>_<to>.pdf`: names must be unique (passwords and
+   expected totals go by name).
 
 ## Telegram bot (front door for now)
 

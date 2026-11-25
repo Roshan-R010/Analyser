@@ -181,13 +181,12 @@ def test_a_second_statement_waits_for_the_password_first():
     tgbot.end_session(c.context)
 
 
-def test_at_most_two_statements_per_borrower():
+def test_at_most_six_statements_per_borrower():
     c = Chat()
-    c.send_pdf(need("cub1.pdf"), name="a.pdf")
-    c.send_pdf(need("cub1.pdf"), name="b.pdf")
-    c.send_pdf(need("cub1.pdf"), name="c.pdf")
+    for i in range(tgbot.MAX_FILES + 1):
+        c.send_pdf(need("cub1.pdf"), name=f"{i}.pdf")
     s = c.user_data["session"]
-    assert len(s.files) == 2 and "2 statements already" in c.said[-1]
+    assert tgbot.MAX_FILES == 6 and len(s.files) == 6 and "6 statements already" in c.said[-1]
     tgbot.end_session(c.context)
 
 

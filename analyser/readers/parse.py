@@ -17,6 +17,8 @@ _DATE_PATTERNS = [
     re.compile(r"(?<!\d)(\d{1,2})[\-/.](\d{1,2})[\-/.](\d{4}|\d{2})(?!\d)"),
     # 2026-10-01
     re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)"),
+    # May 1, 2026 (month first: ICICI's savings download)
+    re.compile(r"\b([A-Za-z]{3,9})\.? (\d{1,2}), (\d{4})(?!\d)"),
 ]
 
 
@@ -40,6 +42,11 @@ def parse_date(text: str) -> date | None:
                     return date(_year(c), month, int(a))
                 if i == 1:
                     return date(_year(c), int(b), int(a))
+                if i == 3:
+                    month = _MONTHS.get(a.lower()[:4]) or _MONTHS.get(a.lower()[:3])
+                    if not month:
+                        continue
+                    return date(int(c), month, int(b))
                 return date(int(a), int(b), int(c))
             except ValueError:
                 continue

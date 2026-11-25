@@ -15,7 +15,8 @@ from analyser.engine import LoadedStatement, load_statement
 from analyser.fmt import inr
 from analyser.unlock import PasswordRequired, StatementError, WrongPassword
 
-OK, NEEDS_PASSWORD, WRONG_PASSWORD, UNREADABLE, REJECTED = "ok", "needs_password", "wrong_password", "unreadable", "rejected"
+OK, SUSPICIOUS = "ok", "suspicious"
+NEEDS_PASSWORD, WRONG_PASSWORD, UNREADABLE, REJECTED = "needs_password", "wrong_password", "unreadable", "rejected"
 
 
 @dataclass
@@ -27,7 +28,8 @@ class FileOutcome:
 
     @property
     def ok(self) -> bool:
-        return self.status == OK
+        """The statement can go into a report (a suspicious one too: the report says so)."""
+        return self.status in (OK, SUSPICIOUS)
 
 
 @dataclass
@@ -38,8 +40,10 @@ class ReportResult:
 
 
 def read_file(path: str | Path, password: str | None = None) -> FileOutcome:
-    """Read and balance-check one statement. A statement whose balances don't add up is REJECTED:
-    it is never put in a report."""
+    """Read and balance-check one statement.
+
+    Balances add up: OK. A known bank layout whose balances don't add up: SUSPICIOUS (it goes into the
+    report, marked). An unknown bank or a layout we cannot read: REJECTED, never put in a report."""
     path = Path(path)
     try:
         loaded = load_statement(path, password, with_picture=True)
@@ -57,11 +61,15 @@ def read_file(path: str | Path, password: str | None = None) -> FileOutcome:
         bank = st.bank.upper() if st.bank != "unknown" else "unrecognised bank"
         return FileOutcome(OK, path.name, f"{bank} · {st.period_from:%d %b %Y} to {st.period_to:%d %b %Y} · "
                                           f"{len(st.transactions)} entries, every balance adds up.", loaded)
-    if not st.transactions:
-        return FileOutcome(REJECTED, path.name, "No transactions could be read: this layout is not supported yet.", loaded)
+    if loaded.suspicious:
+        return FileOutcome(SUSPICIOUS, path.name,
+                           "The balances in this statement do not add up, so it will be marked SUSPICIOUS in the "
+                           "report, with the places where it breaks. It may have been edited.", loaded)
+    if not st.transactions or st.bank == "unknown":
+        return FileOutcome(REJECTED, path.name, "This bank's layout is not supported yet, so it was left out.", loaded)
     return FileOutcome(REJECTED, path.name,
-                       "The balances in this statement do not add up, so it was left out. "
-                       "It may have been edited, or its layout is not supported yet.", loaded)
+                       "This statement could not be read reliably (its balances do not add up on most rows), "
+                       "so it was left out.", loaded)
 
 
 def make_report(loaded: list[LoadedStatement], out_pdf: str | Path) -> ReportResult:

@@ -22,6 +22,29 @@ def _eq(name: str, a: Decimal, b: Decimal, what_a: str, what_b: str) -> Check:
     return Check(name, a == b, "" if a == b else f"{what_a} {a} vs {what_b} {b}")
 
 
+def _failed_detail(v) -> str:
+    """Why a statement failed: the entries that break (first one with its page) and any printed totals that differ."""
+    parts = []
+    if v.breaks:
+        first = v.breaks[0]
+        parts.append(f"{len(v.breaks)} entries do not add up, first on page {first.page_no} ({first.date})")
+    parts += v.problems
+    return "; ".join(parts)
+
+
+def _join_detail(v) -> str:
+    """Say where the statements stop agreeing: what the earlier entries lead to against what is printed."""
+    parts = []
+    for b in v.breaks[:3]:
+        if b.printed is None:
+            parts.append(f"{b.date}: balance missing")
+        else:
+            parts.append(f"{b.date}: earlier entries lead to {b.expected}, statement prints {b.printed} "
+                         f"(difference {abs(b.printed - b.expected)})")
+    more = f" (+{len(v.breaks) - 3} more)" if len(v.breaks) > 3 else ""
+    return f"{len(v.breaks)} breaks at the joins: " + "; ".join(parts) + more
+
+
 def build_checks(report) -> list[Check]:
     tx: list[Transaction] = report.transactions
     credits = sum((t.credit for t in tx), ZERO)
@@ -30,14 +53,14 @@ def build_checks(report) -> list[Check]:
 
     for s in report.statements:
         st, v = s.statement, s.check
-        detail = f"{v.rows_checked} rows" if v.ok else f"{len(v.breaks)} breaks; {'; '.join(v.problems)}"
+        detail = f"{v.rows_checked} rows" if v.ok else _failed_detail(v)
         matched = printed_checks(st)
         printed = f", matches the bank's printed {' and '.join(matched)}" if v.ok and matched else ""
         checks.append(Check(f"Statement {st.statement_no} ({st.bank.upper()}): every balance adds up", v.ok,
                             detail + printed))
     for acc, v in report.account_checks:
         checks.append(Check(f"Account ...{acc.account_no[-4:] or '?'}: statements join up", v.ok,
-                            "" if v.ok else f"{len(v.breaks)} breaks at the joins"))
+                            "" if v.ok else _join_detail(v)))
 
     cf = report.cashflow
     checks.append(_eq("Monthly credits add up to the total", sum((r.credit for r in cf.months), ZERO), credits,
