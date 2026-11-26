@@ -128,7 +128,7 @@ def test_flag_and_summary_quote_the_same_average_balance():
 def test_a_short_statement_shows_everything_a_long_one_would():
     """No time limits: one week of data still fills the recurring page and every cashflow row."""
     rows = [(D1, "300000", "CASH DEPOSIT BY SELF")]
-    rows += [(D1 + timedelta(days=i), "-6000", "UPI/DR/1/RAMESH TEXTILES/IOBA/ramesh@oksbi") for i in range(1, 6)]
+    rows += [(D1 + timedelta(days=i), "-10000", "UPI/DR/1/RAMESH TEXTILES/IOBA/ramesh@oksbi") for i in range(1, 6)]
     r, html = run(build(rows))
     assert [x.party for x in r.recurring] == ["RAMESH TEXTILES"]
     assert all(r.cashflow.last[n] is not None for n in (3, 6, 9, 12)) and "not enough months" not in html
@@ -137,7 +137,7 @@ def test_a_short_statement_shows_everything_a_long_one_would():
 
 def test_a_party_paid_three_times_in_one_month_of_a_longer_statement_is_listed_too():
     rows = [(D1, "300000", "CASH DEPOSIT BY SELF")]
-    rows += [(D1 + timedelta(days=i), "-6000", "UPI/DR/1/RAMESH TEXTILES/IOBA/ramesh@oksbi") for i in range(1, 6)]
+    rows += [(D1 + timedelta(days=i), "-10000", "UPI/DR/1/RAMESH TEXTILES/IOBA/ramesh@oksbi") for i in range(1, 6)]
     rows += [(D1 + timedelta(days=70), "-100", "ATM WDL 1")]
     r, _ = run(build(rows))
     assert [x.party for x in r.recurring] == ["RAMESH TEXTILES"]

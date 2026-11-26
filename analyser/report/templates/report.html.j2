@@ -187,7 +187,7 @@ Transfers sent back (NEFT / RTGS / IMPS / UPI returns and reversals) are listed 
 <p class="note"><b>Party totals cover the statement period, not a monthly commitment.</b><br>
 Monthly patterns use actual payment dates. Extra payments stay separate.
 Variable amounts are grouped by party; totals are rounded to the nearest rupee.
-A party is shown when paid 3 or more times in the statement (₹10,000+ in total, or any lender). Monthly and weekly patterns appear when the statement is long enough to show them.</p>
+A party is shown when paid 3 or more times in the statement (₹10,000+ in total, or any lender). Payments under ₹9,000 (₹5,000 for lenders) are not listed, but party totals include them. Monthly and weekly patterns appear when the statement is long enough to show them.</p>
 {% else %}<p class="muted">No recurring payments: no party was paid 3 or more times (₹10,000+ in total, or any lender) in this statement.</p>{% endif %}
 </section>
 
@@ -223,7 +223,8 @@ A party is shown when paid 3 or more times in the statement (₹10,000+ in total
   {% endfor %}
 </table>
 <p class="note">Bank balance is the statement balance after each entry. Payment groups are based on the transaction narration.
-"+" marks money received from the lender.</p>
+"+" marks money received from the lender.
+Payments under ₹5,000 are not listed, but every total includes them.</p>
 {% else %}<p class="muted">No loan payments or disbursements found: no known lender, finance or chit-fund name, and no EMI, installment or loan wording, appears in this statement.</p>{% endif %}
 </section>
 

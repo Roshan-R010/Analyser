@@ -4,6 +4,9 @@ A party is listed with at least 3 payments (and Rs 10,000+ in total, unless it i
 short the statement: a week-long statement lists what repeated in that week. Cash, own-account transfers, charges and
 unknown entries are not "recurring payments".
 
+Payments under Rs 9,000 (Rs 5,000 for a lender, as on the loan page) are not listed, though the party's
+total and count include them; a party with nothing left to list is left out.
+
 Inside each party, payments are grouped by amount (and by mandate, for auto-debits):
 - an amount paid 3+ times gets its own line (2+ for a mandate or loan account, or when
   the party has only a few payments; at most 8 such lines per party); near-equal amounts (within 0.5%) join it
@@ -20,10 +23,12 @@ from datetime import date
 from decimal import Decimal
 
 from analyser.model import ZERO, Transaction
+from analyser.sections.loans import SHOW_FROM as LOAN_SHOW_FROM
 
 EXCLUDE = {"_CASH", "_SELF", "_CHARGES", "_INTEREST", "_RETURNS", "_UNKNOWN"}
 MIN_PAYMENTS = 3
 MIN_TOTAL = Decimal("10000")  # smaller repeat spends (fuel, food) only lengthen the report
+SHOW_FROM = Decimal("9000")  # smaller payments are counted in the party's total but not listed
 NEAR = Decimal("0.005")  # amounts within 0.5% of a repeated amount join it
 MAX_EXTRA_LINES = 2  # more one-offs than this are shown as one "Variable amounts" line
 MIN_REPEAT = 3  # times an amount must recur for its own line (2 for mandates, loans, or small parties)
@@ -60,6 +65,7 @@ class RecurringRow:
     dates: list[date]
     lender: str
     lines: list[AmountLine] = field(default_factory=list)
+    hidden: int = 0  # payments too small to list
 
 
 def _ordinal(n: int) -> str:
@@ -165,6 +171,9 @@ def build_recurring(transactions: list[Transaction]) -> list[RecurringRow]:
         is_lender = any(t.lender for t in tx)
         if len(tx) < MIN_PAYMENTS or (total < MIN_TOTAL and not is_lender):
             continue
+        shown = [t for t in tx if t.debit >= (LOAN_SHOW_FROM if t.lender else SHOW_FROM)]
+        if not shown:
+            continue
         party = tx[0].party_clean
         rows.append(RecurringRow(
             party=party, key=key,
@@ -172,7 +181,7 @@ def build_recurring(transactions: list[Transaction]) -> list[RecurringRow]:
             total=total, entries=len(tx), amounts=Counter(t.debit for t in tx).most_common(),
             dates=[t.date for t in tx],
             lender=next((t.lender for t in tx if t.lender), ""),
-            lines=amount_lines(tx, party),
+            lines=amount_lines(shown, party), hidden=len(tx) - len(shown),
         ))
     rows.sort(key=lambda r: (-r.total, r.party))
     return rows

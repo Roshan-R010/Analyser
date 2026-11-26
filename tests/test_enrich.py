@@ -263,8 +263,8 @@ def test_loan_page_wording():
     assert _short_refs(["ABCD12345678"]) == {"ABCD12345678": "5678"}
     m = "Auto-debit via X (mandate UTIBDE01111111202606)"
     tx = [T("ECS/a", debit=a, d=date(2026, mo, dy), lender=m, lender_type="Lender not named", mode="ECS/NACH")
-          for a, mo, dy in [("100", 8, 5), ("100", 9, 5), ("500", 9, 30), ("100", 10, 5)]]
-    tx.append(T("NEFT/loan", credit="9000", d=date(2026, 8, 1), lender=m, lender_type="Lender not named"))
+          for a, mo, dy in [("10000", 8, 5), ("10000", 9, 5), ("50000", 9, 30), ("10000", 10, 5)]]
+    tx.append(T("NEFT/loan", credit="900000", d=date(2026, 8, 1), lender=m, lender_type="Lender not named"))
     tx.sort(key=lambda t: t.date)
     (b,) = loan_blocks(build_loans(tx, build_returns(tx)))
     assert b.title == "Auto-debit via X · mandate …2606"  # one mandate: plain last 4

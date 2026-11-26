@@ -63,6 +63,7 @@ def usual_emi(pays: list[Transaction]) -> Decimal | None:
     return sorted(monthly.values())[len(monthly) // 2]  # median month
 
 
+SHOW_FROM = Decimal("5000")  # smaller loan payments are counted in every total but not listed
 POSSIBLE = "Possible lender"  # named like a lender ("... FINANCE") but nothing else says so
 SAME_LENDER_SIMILARITY = 90  # name similarity (%) needed before two lender spellings are even considered
 
@@ -201,6 +202,7 @@ def loan_blocks(loans: list[LenderLoan]) -> list[LoanBlock]:
         chit = ln.type == "Chit fund"
 
         rows, extra = [], 0
+        small = 0
         for t in ln.entries:
             if t.credit:
                 what = "Loan amount received"
@@ -216,7 +218,10 @@ def loan_blocks(loans: list[LenderLoan]) -> list[LoanBlock]:
                 what = "EMI payment"
             else:
                 what = f"Payment · {t.mode}"
-            rows.append((t, what))
+            if t.debit and t.debit < SHOW_FROM:
+                small += 1
+            else:
+                rows.append((t, what))
 
         n = ln.payments
         bits = [] if ln.type in _PLAIN_TYPES else [ln.type]
@@ -238,6 +243,8 @@ def loan_blocks(loans: list[LenderLoan]) -> list[LoanBlock]:
             bits.append("no payment in " + _and([f"{x:%b %Y}" for x in ln.months_missed]))
         if ln.received_total:
             bits.append(f"₹{inr(ln.received_total)} received from this lender")
+        if small:
+            bits.append(f"{small} under ₹{inr(SHOW_FROM)} not listed")
         blocks.append(LoanBlock(title=title, subline=" · ".join(bits) if n else " · ".join(bits[1:] or bits),
                                 paid=ln.paid_total, received=ln.received_total, rows=rows))
     return blocks
