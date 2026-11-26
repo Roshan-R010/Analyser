@@ -53,6 +53,15 @@ class LoadedStatement:
         return self.reportable and not self.check.ok
 
 
+def covering_period(printed_from, printed_to, transactions):
+    """The period of several statements merged into one PDF: page 1 prints only the first one's, so it is
+    widened to take in every entry."""
+    dates = [t.date for t in transactions]
+    start = min([d for d in (printed_from, min(dates, default=None)) if d], default=None)
+    end = max([d for d in (printed_to, max(dates, default=None)) if d], default=None)
+    return start, end
+
+
 def _page_png(page) -> bytes:
     try:
         img = page.to_image(resolution=FIRST_PAGE_DPI).original
@@ -70,7 +79,8 @@ def load_statement(path: str | Path, password: str | None = None, statement_no: 
         bank = detect_bank(pdf).bank
         raw = profiles[bank].raw if bank != UNKNOWN else None
         options = ReaderOptions.from_profile(raw)
-        geometries = page_geometries(path, password, len(pdf.pages), options.y_tolerance)
+        geometries = page_geometries(path, password, len(pdf.pages),
+                                     options.y_tolerance, options.use_text_flow)
         st = read_statement(pdf, bank, options, statement_no=statement_no, geometries=geometries)
         details = read_details(header_text(pdf.pages[0].extract_text() or ""), raw)
         picture = _page_png(pdf.pages[0]) if with_picture else b""
@@ -79,4 +89,6 @@ def load_statement(path: str | Path, password: str | None = None, statement_no: 
     # The period printed on the statement wins over the first/last transaction dates
     st.period_from = details.period_from or st.period_from
     st.period_to = details.period_to or st.period_to
+    if st.merged_sections > 1:
+        st.period_from, st.period_to = covering_period(st.period_from, st.period_to, st.transactions)
     return LoadedStatement(statement=st, check=verify(st), file_name=Path(path).name, first_page_png=picture)

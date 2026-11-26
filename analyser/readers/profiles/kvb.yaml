@@ -1,9 +1,16 @@
 id: kvb
 name: Karur Vysya Bank
 detect:
-  header: ['\bKVBL0\d{6}\b', 'Karur Vysya', '\bKVB ADVANTAGE\b']
+  # The last one is the netbanking download, which has the bank's name only in its logo picture
+  header: ['\bKVBL0\d{6}\b', 'Karur Vysya', '\bKVB ADVANTAGE\b', 'Opening Balance \( Balance B/F \)']
   # Checked on the last page (bank notices / footer)
   footer: ['kvb\.bank\.in', 'Karur Vysya']
 details:
   # Name is the first line under "ACCOUNT STATEMENT", before "Acc.No."
-  holder: '^(?P<h>.+?)\s+Acc\.\s*No'
+  # Netbanking download: "Account Holder(s) Name FIRM / PARTNER / PARTNER"
+  holder:
+    - '^(?P<h>.+?)\s+Acc\.\s*No'
+    - '^Account Holder\(s\) Name\s+(?P<h>[^/\n]+?)\s*(?:/|$)'
+reader:
+  # A long description runs on under the amount columns in the netbanking download
+  use_text_flow: true

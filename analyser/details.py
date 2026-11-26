@@ -27,6 +27,8 @@ HOLDER = [
     re.compile(r"^\s*name\s*[:\-]\s*(?P<h>.+?)" + _NEXT_LABEL, re.I | re.M),
 ]
 PERIOD_LINE = re.compile(r"(period|from|statement of|between)", re.I)
+# The two ends of the period on lines of their own
+FROM_TO = [re.compile(rf"^\s*{end}\s*date\s*[:\-]?\s*(\S+)\s*$", re.I | re.M) for end in ("from", "to")]
 
 
 @dataclass
@@ -71,4 +73,8 @@ def read_details(header: str, profile_raw: dict | None = None) -> Details:
             if len(dates) >= 2 and dates[0] <= dates[1]:
                 d.period_from, d.period_to = dates[0], dates[1]
                 break
+    if d.period_from is None:
+        ends = [find_dates(m.group(1)) for m in (p.search(header) for p in FROM_TO) if m]
+        if len(ends) == 2 and all(ends) and ends[0][0] <= ends[1][0]:
+            d.period_from, d.period_to = ends[0][0], ends[1][0]
     return d

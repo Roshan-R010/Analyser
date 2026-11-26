@@ -64,6 +64,7 @@ class Statement:
     transactions: list[Transaction] = field(default_factory=list)
     page_count: int = 0
     statement_no: int = 0
+    merged_sections: int = 1  # how many separate statements the PDF holds, each with its own totals
     # Totals the bank itself prints (if any), used as an extra cross-check
     printed_total_debit: Decimal | None = None
     printed_total_credit: Decimal | None = None

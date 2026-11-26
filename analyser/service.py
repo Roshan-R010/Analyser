@@ -13,6 +13,7 @@ from pathlib import Path
 
 from analyser.engine import LoadedStatement, load_statement
 from analyser.fmt import inr
+from analyser.sections.suspicion import check_pages, page_list
 from analyser.unlock import PasswordRequired, StatementError, WrongPassword
 
 OK, SUSPICIOUS = "ok", "suspicious"
@@ -57,6 +58,8 @@ def read_file(path: str | Path, password: str | None = None) -> FileOutcome:
         return FileOutcome(UNREADABLE, path.name, "This statement could not be read.")
 
     st = loaded.statement
+    pages = page_list(check_pages(loaded))
+    to_check = f" Pages to check by hand: {pages}." if pages else ""
     if loaded.supported:
         bank = st.bank.upper() if st.bank != "unknown" else "unrecognised bank"
         return FileOutcome(OK, path.name, f"{bank} · {st.period_from:%d %b %Y} to {st.period_to:%d %b %Y} · "
@@ -64,12 +67,12 @@ def read_file(path: str | Path, password: str | None = None) -> FileOutcome:
     if loaded.suspicious:
         return FileOutcome(SUSPICIOUS, path.name,
                            "The balances in this statement do not add up, so it will be marked SUSPICIOUS in the "
-                           "report, with the places where it breaks. It may have been edited.", loaded)
+                           "report, with the places where it breaks. It may have been edited." + to_check, loaded)
     if not st.transactions or st.bank == "unknown":
         return FileOutcome(REJECTED, path.name, "This bank's layout is not supported yet, so it was left out.", loaded)
     return FileOutcome(REJECTED, path.name,
                        "This statement could not be read reliably (its balances do not add up on most rows), "
-                       "so it was left out.", loaded)
+                       "so it was left out." + to_check, loaded)
 
 
 def make_report(loaded: list[LoadedStatement], out_pdf: str | Path) -> ReportResult:

@@ -123,3 +123,27 @@ def test_a_suspicious_statement_gets_a_report_with_the_notice_on_the_first_page(
     ls.statement.account_holder = "T"
     html = render_html(analyse([ls]))
     assert "Suspicious statement" in html and "Where it does not add up" in html and "SUSPICIOUS: statement 1" in html
+
+
+def test_every_page_to_check_by_hand_is_listed_including_skipped_rows():
+    from analyser.analysis import analyse
+    from analyser.report.render import render_html
+    from analyser.sections.suspicion import check_pages, page_list
+    # 12 broken rows on pages 1-12 (more than the report's table lists), and a row skipped on page 20
+    rows = [("0", "10", str(1000 + 25 * (i + 1))) for i in range(12)]  # each is 15 out
+    rows += [("0", "10", str(1300 + 10 * i)) for i in range(1, 60)]  # these add up
+    ls = _loaded("hdfc", rows, pages=list(range(1, 13)) + [13] * 59)
+    ls.statement.warnings.append("page 20: unreadable amount on 2026-01-01: debit 'IA' credit '1.00'")
+    assert ls.suspicious
+    assert check_pages(ls) == [*range(1, 13), 20]
+    assert page_list(check_pages(ls)) == "1-12, 20"
+    ls.statement.account_holder = "T"
+    assert "Pages to check by hand: 1-12, 20" in render_html(analyse([ls]))
+
+
+def test_the_chat_message_says_which_pages_to_check(monkeypatch, tmp_path):
+    from analyser import service
+    ls = _loaded("hdfc", [("0", "500", "1500"), ("200", "0", "1400"), ("100", "0", "1300")], pages=[1, 3, 3])
+    monkeypatch.setattr(service, "load_statement", lambda *a, **k: ls)
+    out = service.read_file(tmp_path / "x.pdf")
+    assert out.status == service.SUSPICIOUS and "Pages to check by hand: 3" in out.message

@@ -22,6 +22,7 @@ from pathlib import Path
 from analyser.engine import LoadedStatement, load_statement
 from analyser.fmt import inr_paise as inr
 from analyser.model import ZERO
+from analyser.sections.suspicion import check_pages, page_list
 from analyser.unlock import PasswordRequired, StatementError, WrongPassword, read_password_file
 
 ROOT = Path(__file__).resolve().parent
@@ -68,6 +69,8 @@ def describe(ls: LoadedStatement) -> None:
                   f"statement shows {inr(b.printed)}  | {b.description[:50]}")
         for p in check.problems:
             print(f"       {p}")
+        if pages := check_pages(ls):
+            print(f"     pages to check by hand: {page_list(pages)}")
 
 
 def write_csv(ls: LoadedStatement) -> Path:

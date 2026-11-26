@@ -38,6 +38,7 @@
     {% for s in r.suspicious %}
     <p><b>Statement {{ s.statement_no }}: the numbers do not add up.</b>
       {% if not s.breaks %}{% for p in s.problems %}{{ p }}. {% endfor %}{% endif %}</p>
+    {% if s.pages %}<p><b>Pages to check by hand: {{ s.pages }}</b></p>{% endif %}
     <ul>{% for w in s.what_might_be_wrong %}<li>{{ w }}</li>{% endfor %}</ul>
     {% endfor %}
     <p class="muted">The figures in this report are read from the statement as printed. Treat them with care until the original is checked.</p>

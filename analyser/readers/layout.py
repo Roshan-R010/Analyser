@@ -108,10 +108,12 @@ class PageGeometry:
     extra: dict = field(default_factory=dict)
 
 
-def page_geometry(page, y_tolerance: float = 3) -> PageGeometry:
+def page_geometry(page, y_tolerance: float = 3, use_text_flow: bool = False) -> PageGeometry:
     """y_tolerance: how far apart (points) letters may sit and still be one word's line. Statements
-    that set 6-point text on 6-point lines need a smaller value, or neighbouring lines get mixed."""
-    raw = page.extract_words(keep_blank_chars=False, use_text_flow=False, y_tolerance=y_tolerance)
+    that set 6-point text on 6-point lines need a smaller value, or neighbouring lines get mixed.
+    use_text_flow: build words in the order the PDF draws them, not left to right. Needed when text runs
+    on unseen past its cell and under the next one, or the two merge into one word."""
+    raw = page.extract_words(keep_blank_chars=False, use_text_flow=use_text_flow, y_tolerance=y_tolerance)
     words = [Word(w["text"], w["x0"], w["x1"], w["top"], w["bottom"]) for w in raw]
     h, v = [], []
     for e in page.edges:

@@ -31,7 +31,8 @@ TOTALS_PATTERNS = [
 ]
 # Balances the bank prints ("OPENING BALANCE 128541.23", "Closing Balance : 65,191.81 Cr")
 _AMT = r"(?:rs\.?|inr|₹)?\s*(-?[\d,]+\.\d{2})\s*(cr|dr)?\b"
-OPENING_PRINTED = re.compile(r"opening\s*balance\s*:?\s*" + _AMT, re.I)
+# A note in brackets may follow the label ("Opening Balance ( Balance B/F )")
+OPENING_PRINTED = re.compile(r"opening\s*balance\s*(?:\([^)\n]*\)\s*)?:?\s*" + _AMT, re.I)
 # Not a heading row: its figure would be followed by more figures (IDFC's summary row)
 CLOSING_PRINTED = re.compile(r"closing\s*balance\s*:?\s*" + _AMT + r"(?!\s*-?[\d,]+\.\d{2})", re.I)
 # A bank's own list of returned cheques, printed after the transactions
@@ -61,16 +62,24 @@ class ReaderOptions:
     # The bank's "Cheque / Reference No" column holds both: a short number (3-8 digits) is a cheque
     # number, a long one (an IMPS / UPI reference) stays a reference
     short_ref_is_cheque: bool = False
+    # Read words in drawing order (see page_geometry): long text runs on under the next column
+    use_text_flow: bool = False
+    # A long description prints on past its cell, through the columns to its right (IDFC)
+    description_spills: bool = False
+    # One printed totals summary per statement: add them all up when several are merged into one PDF
+    totals_per_section: bool = False
 
     @classmethod
     def from_profile(cls, raw: dict | None) -> "ReaderOptions":
         cfg = (raw or {}).get("reader") or {}
         extra = [(pat, fld) for pat, fld in (cfg.get("columns") or {}).items()]
-        totals = ((raw or {}).get("totals") or {}).get("pattern", "")
+        totals = (raw or {}).get("totals") or {}
         return cls(description_join=cfg.get("description_join", " "), extra_columns=extra,
-                   totals_pattern=totals, y_tolerance=cfg.get("y_tolerance", 3),
+                   totals_pattern=totals.get("pattern", ""), totals_per_section=bool(totals.get("per_section")),
+                   description_spills=bool(cfg.get("description_spills", False)), y_tolerance=cfg.get("y_tolerance", 3),
                    fold_into_description=tuple(cfg.get("fold_into_description") or ()),
-                   short_ref_is_cheque=bool(cfg.get("short_ref_is_cheque", False)))
+                   short_ref_is_cheque=bool(cfg.get("short_ref_is_cheque", False)),
+                   use_text_flow=bool(cfg.get("use_text_flow", False)))
 
 
 @dataclass
@@ -95,8 +104,11 @@ def read_statement(pdf, bank: str = "unknown", options: ReaderOptions | None = N
     st = Statement(bank=bank, page_count=len(pdf.pages), statement_no=statement_no)
     table: Table | None = None
     rows: list[RawRow] = []
+    page_texts: list[str] = []
     for page_no, page in enumerate(pdf.pages, start=1):
-        geo = geometries[page_no - 1] if geometries else page_geometry(page, options.y_tolerance)
+        geo = geometries[page_no - 1] if geometries else page_geometry(page, options.y_tolerance, options.use_text_flow)
+        if options.totals_per_section:
+            page_texts.append("\n".join(ln.text for ln in geo.lines))
         found = find_table(geo, options.extra_columns)
         if found:
             for c in found.columns:
@@ -108,7 +120,7 @@ def read_statement(pdf, bank: str = "unknown", options: ReaderOptions | None = N
             continue  # no table seen yet (cover page, summary page)
         else:
             start_y = 0.0
-        rows.extend(_page_rows(geo, table, start_y, page_no))
+        rows.extend(_page_rows(geo, table, start_y, page_no, options.description_spills))
 
     if table is None:
         st.warnings.append("No transaction table found (format not supported yet)")
@@ -119,6 +131,8 @@ def read_statement(pdf, bank: str = "unknown", options: ReaderOptions | None = N
     if _is_newest_first(st.transactions):
         st.transactions.reverse()
     _read_printed_totals(pdf, st, options)
+    if options.totals_per_section:
+        _add_up_section_totals(page_texts, st, options.totals_pattern)
     if st.opening_balance is None and st.transactions and st.transactions[0].balance is not None:
         first = st.transactions[0]
         st.opening_balance = first.balance - first.amount
@@ -150,7 +164,23 @@ def _is_anchor(line_words: list[Word], table: Table) -> bool:
     return parse_date(text) is not None or bool(re.match(r"\d{1,2}[-/ ][A-Za-z]{3}[-/ ]?$", text))
 
 
-def _page_rows(geo: PageGeometry, table: Table, start_y: float, page_no: int) -> list[RawRow]:
+_MONEY_WORD = re.compile(r"^(\(?-?[\d,]*\.\d{2}\)?(cr|dr)?\.?|cr|dr|-)$", re.I)
+_SPILL_CHECKED = {"debit": _MONEY_WORD, "credit": _MONEY_WORD, "amount": _MONEY_WORD, "balance": _MONEY_WORD,
+                  "cheque_no": re.compile(r"^\d{6}$")}
+
+
+def _field_of(word: Word, table: Table, spills: bool) -> str | None:
+    """The field a word is read into. Where long descriptions print on past their cell (spills), a word
+    that cannot be an amount or a cheque number is a piece of the description."""
+    col = table.column_of(word)
+    if col is None or col.field == "other":
+        return None
+    wanted = _SPILL_CHECKED.get(col.field) if spills else None
+    return "description" if wanted and not wanted.match(word.text) else col.field
+
+
+def _page_rows(geo: PageGeometry, table: Table, start_y: float, page_no: int,
+               spills: bool = False) -> list[RawRow]:
     lines = [Line([w for w in ln.words]) for ln in geo.lines if ln.top > start_y]
     if not lines:
         return []
@@ -169,10 +199,9 @@ def _page_rows(geo: PageGeometry, table: Table, start_y: float, page_no: int) ->
         for ln in grp:
             per_field: dict[str, list[Word]] = {}
             for w in ln.words:
-                col = table.column_of(w)
-                if col is None or col.field == "other":
-                    continue
-                per_field.setdefault(col.field, []).append(w)
+                fld = _field_of(w, table, spills)
+                if fld:
+                    per_field.setdefault(fld, []).append(w)
             for fld, ws in per_field.items():
                 cells.setdefault(fld, []).append(
                     CellLine(" ".join(w.text for w in ws), ws[0].x0, ws[-1].x1))
@@ -326,6 +355,16 @@ def _read_printed_totals(pdf, st: Statement, options: ReaderOptions) -> None:
     if closings:
         st.printed_closing = _money(closings[-1].group(1), closings[-1].group(2))
     st.printed_returns = read_returns_table("\n".join(tail_pages[::-1]))
+
+
+def _add_up_section_totals(page_texts: list[str], st: Statement, pattern: str) -> None:
+    """Several statements merged into one PDF each print their own totals: the file's are the sum."""
+    # Some layouts repeat the summary on every page: the same figures are one statement
+    found = list({m.group(0): m for text in page_texts for m in re.finditer(pattern, text, re.I)}.values())
+    if len(found) > 1:
+        st.merged_sections = len(found)
+        st.printed_total_debit = sum((_money(m.group("debit")) for m in found), ZERO)
+        st.printed_total_credit = sum((_money(m.group("credit")) for m in found), ZERO)
 
 
 def read_returns_table(text: str) -> list[PrintedReturn]:

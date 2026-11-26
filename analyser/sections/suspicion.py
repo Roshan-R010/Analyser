@@ -8,6 +8,7 @@ says "compare with the original" rather than accusing anyone.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -15,6 +16,25 @@ from decimal import Decimal
 
 MAX_FINDINGS = 8  # places listed per statement; the count of the rest is still shown
 MANY_BREAKS = 3  # this many broken rows (or a printed-total mismatch) makes it "highly" suspicious
+
+
+def check_pages(loaded) -> list[int]:
+    """Every page of the PDF to compare by hand: where a balance does not follow, and where a row could
+    not be read (the break then shows up on the next row, which may be on the next page)."""
+    pages = {b.page_no for b in loaded.check.breaks}
+    pages |= {int(m.group(1)) for w in loaded.statement.warnings if (m := re.match(r"page (\d+):", w))}
+    return sorted(pages)
+
+
+def page_list(pages: list[int]) -> str:
+    """"3, 9-11, 20"."""
+    runs: list[list[int]] = []
+    for p in pages:
+        if runs and p == runs[-1][1] + 1:
+            runs[-1][1] = p
+        else:
+            runs.append([p, p])
+    return ", ".join(str(a) if a == b else f"{a}-{b}" for a, b in runs)
 
 
 @dataclass
@@ -45,6 +65,7 @@ class SuspiciousStatement:
     findings: list[Finding] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)  # printed totals / opening / closing that disagree
     what_might_be_wrong: list[str] = field(default_factory=list)
+    pages: str = ""  # every page to check by hand, e.g. "3, 9-11"
 
     @property
     def more(self) -> int:
@@ -104,7 +125,8 @@ def build_suspicion(loaded: list) -> list[SuspiciousStatement]:
         out.append(SuspiciousStatement(
             statement_no=st.statement_no, bank=st.bank, file_name=ls.file_name, rows=check.rows_checked,
             breaks=len(check.breaks), level="high" if high else "watch", findings=findings,
-            problems=list(check.problems), what_might_be_wrong=notes))
+            problems=list(check.problems), what_might_be_wrong=notes,
+            pages=page_list(check_pages(ls))))
     return out
 
 

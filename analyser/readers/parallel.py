@@ -18,19 +18,19 @@ MAX_WORKERS = 8
 
 
 def _read_pages(args: tuple) -> list[PageGeometry]:
-    path, password, first, last, y_tolerance = args
+    path, password, first, last, y_tolerance, use_text_flow = args
     with open_statement(path, password) as pdf:
-        return [page_geometry(pdf.pages[i], y_tolerance) for i in range(first, last)]
+        return [page_geometry(pdf.pages[i], y_tolerance, use_text_flow) for i in range(first, last)]
 
 
 def page_geometries(path: str | Path, password: str | None, page_count: int,
-                    y_tolerance: float = 3) -> list[PageGeometry] | None:
+                    y_tolerance: float = 3, use_text_flow: bool = False) -> list[PageGeometry] | None:
     """Layouts of every page in order, or None when the caller should read the pages itself."""
     workers = min(MAX_WORKERS, os.cpu_count() or 1, page_count // 4)
     if page_count < MIN_PAGES or workers < 2:
         return None
     step = -(-page_count // workers)  # ceil: one contiguous block of pages per worker
-    jobs = [(str(path), password, a, min(a + step, page_count), y_tolerance) for a in range(0, page_count, step)]
+    jobs = [(str(path), password, a, min(a + step, page_count), y_tolerance, use_text_flow) for a in range(0, page_count, step)]
     try:
         with ProcessPoolExecutor(max_workers=len(jobs)) as pool:
             return [geo for block in pool.map(_read_pages, jobs) for geo in block]

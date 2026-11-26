@@ -21,6 +21,10 @@ def _r(pattern: str) -> re.Pattern:
     return re.compile(pattern, re.I)
 
 
+# A biller paid through a payment gateway (KVB): "IBIBO-<reference>-<payee>--<account> H.O"
+GATEWAY_BILL = _r(r"^(?:ibibo|razorpay|billdesk)-[^-]+-\s*(?P<payee>[^-]+?)\s*--\s*\d+\s*h\.o$")
+
+
 RULES: list[tuple[str, re.Pattern]] = [
     # Bank charges, GST on charges, return charges
     (CHARGES, _r(r"\bchgs?\b|\bchrgs?\b|\bcharges?\b|\+\s*gst|incl\.?\s*gst|\bgst\s*on\b|\bcommission\b"
@@ -50,6 +54,7 @@ RULES: list[tuple[str, re.Pattern]] = [
               r"|\bcwdl\b|\bcsw\b|chq\s*paid[\s\-]*self|self\s*-\s*chq|^\s*your\s*self\s*$|^\s*self\s*$|^(nwd|atw)-")),
     (CARD, _r(r"\bpos\b|pos[\-/_]|^pos\d|^mps/|\bvps/|\bips/|debit\s*card|\becom\b|\bpcd/|card\s*pmt|cards?\s*settl|^\d{6}x{4,}\d{4}\b")),
     (BILLPAY, _r(r"^bil/|\bbbps\b|\bbpay\b|bill\s*pay")),
+    (BILLPAY, GATEWAY_BILL),
     (CHEQUE, _r(r"\bclg\b|clg[:/]|_clg\b|^chqpaid|clearing|\bchq\b|\bcheque\b|\bcts\b|\bi/w\b|\bo/w\b|inward\s*clg")),
 ]
 

@@ -162,6 +162,9 @@ def extract_name(description: str, allow_bank: bool = False) -> str:
     allow_bank: the party may be a bank (ECS/ACH debits: "ACH-DR-HDFC BANK LTD-...").
     """
     text = description or ""
+    gateway = M.GATEWAY_BILL.match(text)
+    if gateway:
+        text = gateway.group("payee")  # the gateway is the channel, not the party
     text = REMARK_AFTER_MASK.split(text)[0]  # drop the free-text remark after a masked account
     text = BRANCH_TAIL.split(text)[0]  # the bank's own branch is never the party
     text = CHQNO_TAIL.sub("", text)

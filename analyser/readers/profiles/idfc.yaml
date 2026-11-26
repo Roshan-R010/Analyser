@@ -5,7 +5,11 @@ detect:
 details:
   holder: 'CUSTOMER NAME\s*:\s*(?P<h>.+?)\s+ACCOUNT BRANCH\s*:'
 totals:
+  # Several statements merged into one PDF each have their own summary
+  per_section: true
   # Page 1 summary: "Opening Balance  Total Debit  Total Credit  Closing Balance" then four figures
   pattern: 'Closing Balance\s+[\d,]+\.\d{2}\s+(?P<debit>[\d,]+\.\d{2})\s+(?P<credit>[\d,]+\.\d{2})\s+[\d,]+\.\d{2}'
 reader:
   description_join: auto
+  # A long unbroken word in the description prints on into the cheque and debit cells
+  description_spills: true
